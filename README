@@ -1,0 +1,48 @@
+ftpc and ftps are a pair of applications that work to simply transfer files between two IP hosts.
+tcpdaemon is a daemon that implements some features of TCP on top of UDP at the application layer.
+
+
+You can compile the client, server, and the tcpdaemon by issuing a "make". The binaries are placed in the "bin" directory
+You MUST be using GNU make, so if you are on a non-Linux Unix(e.g. Solaris) you must use gmake.
+
+
+To use, first run the troll application on a host and specify a port number
+Then, run tcpdaemon on both endpoints. On each one, you must specify on the command line the host and then the port where the troll application is running. e.g. "./bin/tcpdaemon 127.0.0.1 5678"
+
+Then, run ftps on the machine meant to receive the file.  ftps takes one argument, the port(UDP) on which to listen.
+e.g. "./bin/ftps 5566"
+
+Next, run ftpc on the host sending the file. ftpc requires 3 arguments.
+The first argument is the host on which to connect(the host that is running ftps).
+The second argument is the port number on which to connect to ftps(the same port number specified on the ftps command)
+The third argument is the name of a file to send.
+e.g. "./bin/ftpc ahost 5566 afile.txt"
+
+ftpc will send the file to ftps. Both applications and the daemon will print out various information about the process that you can safely ignore.
+
+Notice, you can transfer files with any length filename, but the filename of any file whos name exceeds 20 characters will be truncated.
+Example Usage:
+
+[machinea]./troll-linux  -x 0 -t -s 0 $TROLLPORT
+[machineb] ./tcpdaemon machinea $TROLLPORT
+[machineb] ./ftps $SERVERPORT 
+[machineb] ./ftps machineb $SERVERPORT afilename 
+
+The daemon is designed to implement the full interface of the POSIX TCP socket layer, but it is not completely implemented.
+In particular, the final implementation will allow a server to accept() multple times on one socket and recv and send to these multiple streams completely independantly. 
+As of now, the daemon has only been tested for one way communication using a CONNECT() to a corresponding ACCEPT() and pairs of SEND() and RECV()
+
+BUGS:
+There is a slight bug I was not able to work out.Two TCPDaemons running on two separate machines seem to not communicate correctly.
+The software is still able to be tested end to end by running one TCPDaemon and running both ftps and ftpc on the same machine and the troll on any other machine. Information correctly flows from ftpc->TCPDaemon---UDP>Troll---UDP>TCPDaemon->ftps.
+
+FILES:
+
+client.cpp: The ftpc binary
+server.cpp: The ftps binary
+tcpmain.cpp: The main() for the tcpdaemon binary
+common.h: Various constants used by all binaries for the IPC comm system
+tcpdaemon/api.(h|cpp): The IPC client. This is linked into ftpc and ftps. It contains the implementation for SOCKET(),BIND(),CONNECT(),LISTEN() etc etc
+tcpdaemon/TCPDaemon.(h|cpp): The primary TCPDaemon object. This object poll()s on relevant sockets,creates TCPConn objects, alerts TCPConn objects when data is arriving.
+tcpdaemon/TCPConn.(h|cpp): The TCPConn object encapsulates all information about a "connection". Each end has a corresponding TCPConn object. They are created when a BindRequest or ConnectRequest packet is sent by a client application
+tcpdaemon/packets/IPCPackets.(h|cpp): Contains implementation for all IPCPackets sent between a client and TCPDaemon over domain sockets. Packets sent by a client to the daemon are "Request" packets, and the client blocks until a corressponding "Response" packet is received from the Daemon.
