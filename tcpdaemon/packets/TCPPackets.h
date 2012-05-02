@@ -1,6 +1,13 @@
 #ifndef TCPPACKETS_H
 #define TCPPACKETS_H
+
+#ifdef linux
 #include <stdint.h>
+#endif
+#ifdef sun
+#include <inttypes.h>
+#endif
+
 #include <sys/socket.h>
 #include <netinet/in.h>
 
