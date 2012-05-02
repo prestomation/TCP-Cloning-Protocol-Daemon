@@ -21,7 +21,7 @@ class TCPPacket
             uint32_t ackNum;
             short checksum;
             int payloadsize;
-            char *payload;
+            char payload[1024];
 
         } packet;
 

@@ -1,41 +1,37 @@
 #include "TCPPackets.h"
 #include <string.h> //memcpy
+#include <iostream>
+#include <arpa/inet.h>
+
 
 TCPPacket::TCPPacket(sockaddr_in destination, uint32_t seqnum, uint32_t acknum, char * payload, int payloadsize)
 {
-packet.header = destination;
-	packet.seqNum = seqnum;
-	packet.ackNum = acknum;
-	packet.payloadsize = payloadsize;
-    memcpy(payload, &packet.payload, payloadsize); 
-	mState = STATE_OUTGOING;
+
+	packet.header.sin_family = htons(AF_INET);
+	packet.header.sin_addr = destination.sin_addr;
+	packet.header.sin_port  = destination.sin_port;
+
+    packet.seqNum = seqnum;
+    packet.ackNum = acknum;
+    packet.payloadsize = payloadsize;
+    memcpy(packet.payload, payload, payloadsize); 
+    mState = STATE_OUTGOING;
 } 
 
 TCPPacket::TCPPacket(int sock)
 {
     mState = STATE_INCOMING;
     ::recvfrom(sock, &packet, sizeof(packet), 0, 0, 0);
-
-/*
-    ::recvfrom(sock, &header, sizeof(header), 0, 0, 0);
-    ::recvfrom(sock, &seqNum, sizeof(seqNum), 0, 0, 0);
-    ::recvfrom(sock, &ackNum, sizeof(ackNum), 0, 0, 0);
-    ::recvfrom(sock, &checksum, sizeof(checksum), 0, 0, 0);
-    ::recvfrom(sock, &payloadsize, sizeof(payloadsize), 0, 0, 0);
-    ::recvfrom(sock, &payload, payloadsize, 0, 0, 0);*/
 }
 
 int TCPPacket::send(int sock)
 {
     int bytesSent = 0;
-/*
-    bytesSent += ::sendto(sock, &header, sizeof(header), 0, (struct sockaddr*)&trollAddrInfo, sizeof(trollAddrInfo));
-    bytesSent += ::sendto(sock, &seqNum, sizeof(seqNum), 0, (struct sockaddr*)&trollAddrInfo, sizeof(trollAddrInfo));
-    bytesSent += ::sendto(sock, &ackNum, sizeof(ackNum), 0, (struct sockaddr*)&trollAddrInfo, sizeof(trollAddrInfo));
-    bytesSent += ::sendto(sock, &checksum, sizeof(checksum), 0, (struct sockaddr*)&trollAddrInfo, sizeof(trollAddrInfo));
-    bytesSent += ::sendto(sock, &payloadsize, sizeof(payloadsize), 0, (struct sockaddr*)&trollAddrInfo, sizeof(trollAddrInfo));
-    bytesSent += ::sendto(sock, &payload, payloadsize, 0, (struct sockaddr*)&trollAddrInfo, sizeof(trollAddrInfo));
-*/
+
+    char * destinet;
+    destinet = inet_ntoa(packet.header.sin_addr);
+    std::cout << "Sending TCP Packet destined for "<< destinet << std::endl;
+
     bytesSent += ::sendto(sock, &packet, sizeof(packet), 0, (struct sockaddr*)&trollAddrInfo, sizeof(trollAddrInfo));
     return bytesSent;
 }
