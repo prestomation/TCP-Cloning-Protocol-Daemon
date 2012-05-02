@@ -34,14 +34,6 @@ class TCPDaemon {
 		ssize_t sendto(int sockfd, const void *buf, size_t len, int flags,
 				const struct sockaddr *dest_addr, socklen_t addrlen);
 
-		//
-		struct TrollMessage{
-			struct sockaddr_in header;
-			//TODO: Variable size
-			int bodysize;
-			char body[1024];
-		};
-
 	private:
 
 		//TODO:Do this better, we shouldn't have a max

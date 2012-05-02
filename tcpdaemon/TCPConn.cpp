@@ -5,6 +5,7 @@
 #include "TCPConn.h"
 #include "packets/IPCPackets.h"
 #include "TCPDaemon.h"
+#include "TimerService.h"
 
 using namespace std;
 

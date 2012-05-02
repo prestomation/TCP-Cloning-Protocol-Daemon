@@ -13,7 +13,7 @@ class RecvRequestPacket;
 class SendRequestPacket;
 class AcceptRequestPacket;
 class TCPDaemon;
-
+class TimerService;
 
 //A TCPConn encapsulates all information about a connection between two endpoints
 //It contains an socket connected to the client API domain socket
