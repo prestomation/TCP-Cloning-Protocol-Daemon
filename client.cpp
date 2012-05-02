@@ -37,7 +37,7 @@ int main(int argc, char *argv[])
     int totalbytes = 0;
 
 
-    if(argc < 2) {
+    if(argc < 4) {
         cout << "usage: ftpc remote_host port filename " << endl;
         exit(1);
     }
