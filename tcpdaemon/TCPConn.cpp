@@ -165,6 +165,7 @@ void TCPConn::SendRequest(SendRequestPacket* packet)
     SendResponsePacket response;
     response.bytesSent = bytesSent;
     response.send(mIPCSock, mIPCInfo);
+    delete packet;
 }
 
 
