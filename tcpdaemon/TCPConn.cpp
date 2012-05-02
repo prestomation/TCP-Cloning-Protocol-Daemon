@@ -4,8 +4,8 @@
 
 #include "TCPConn.h"
 #include "packets/IPCPackets.h"
+#include "packets/TCPPackets.h"
 #include "TCPDaemon.h"
-#include "TimerService.h"
 
 using namespace std;
 
@@ -102,25 +102,19 @@ void TCPConn::ReceiveData()
 
     if(mState == ACCEPTING)
     {
-        TCPDaemon::TrollMessage newMessage;
 
-        recvBytes = recvfrom(mUDPSocket, &newMessage, sizeof(newMessage), 0, (struct sockaddr *)&incomingInfo, (socklen_t*) &sockaddr_inLen);
+        TCPPacket incomingPacket(mUDPSocket);
 
-        if (recvBytes < 0 )
-        {
-            cout << "No bytes received. This really shouldn't happen.." << endl;
-        }
-        cout << "Received " << recvBytes << " bytes!" << endl;
         mClientSocket = socketpool++;
         cout << "We are accepting a new connection" << endl;
         //Unblock the accepting call at the client. 
         AcceptResponsePacket response;
         response.code = 0;
-        response.connID = mClientSocket;
+        //response.connID = mClientSocket;
         //response.addr = incomingInfo.sin_addr.s_addr;
         //response.port = ntohs(incomingInfo.sin_port);
-        response.addr = newMessage.header.sin_addr.s_addr;
-        response.port = ntohs(newMessage.header.sin_port);
+        //response.addr = incomingPacket.header.sin_addr.s_addr;
+        //response.port = ntohs(newMessage.header.sin_port);
         cout << "Sending AcceptResponse" << endl;
         response.send(mIPCSock, mIPCInfo);
         cout << "Going into STANDBY" << endl;
@@ -128,9 +122,9 @@ void TCPConn::ReceiveData()
     }
     else if (mState == RECV)
     {
-        TCPDaemon::TrollMessage newMessage;
+        //TCPDaemon::TrollMessage newMessage;
 
-        recvBytes = recvfrom(mUDPSocket, &newMessage, sizeof(newMessage), 0, (struct sockaddr *)&incomingInfo, (socklen_t*) &sockaddr_inLen);
+        /*recvBytes = recvfrom(mUDPSocket, &newMessage, sizeof(newMessage), 0, (struct sockaddr *)&incomingInfo, (socklen_t*) &sockaddr_inLen);
 
         if (recvBytes < 0 )
         {
@@ -142,7 +136,7 @@ void TCPConn::ReceiveData()
         response.size = newMessage.bodysize;
         response.send(mIPCSock, mIPCInfo);
         cout << "Going into STANDBY" << endl;
-        mState = STANDBY;
+        mState = STANDBY;*/
     }
 }
 
@@ -161,7 +155,9 @@ void TCPConn::SendRequest(SendRequestPacket* packet)
     cout << "Going into SEND" << endl;
 
     mState=SEND;
-    int bytesSent = theDaemon.sendto(mUDPSocket, &packet->data, packet->size, 0, (struct sockaddr *)&mRemoteInfo, sizeof(mRemoteInfo));
+    TCPPacket outgoingPacket(mRemoteInfo, 0, 0, packet->data, packet->size);
+    //int bytesSent = theDaemon.sendto(mUDPSocket, &packet->data, packet->size, 0, (struct sockaddr *)&mRemoteInfo, sizeof(mRemoteInfo));
+    int bytesSent = outgoingPacket.send(mUDPSocket);
     SendResponsePacket response;
     response.bytesSent = bytesSent;
     response.send(mIPCSock, mIPCInfo);

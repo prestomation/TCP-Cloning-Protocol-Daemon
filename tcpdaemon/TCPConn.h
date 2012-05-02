@@ -44,8 +44,6 @@ class TCPConn
     //This is called by TCPDaemon when data arrives
     void ReceiveData();
 
-    
-
     private:
 
     

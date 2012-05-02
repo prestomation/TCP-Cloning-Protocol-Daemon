@@ -17,6 +17,7 @@ using namespace std;
 #include "api.h"
 #include "TCPDaemon.h"
 #include "packets/IPCPackets.h"
+#include "packets/TCPPackets.h"
 
 
 TCPDaemon::TCPDaemon(): mNumListeningSockets(1),mRunning(true)
@@ -26,7 +27,8 @@ TCPDaemon::TCPDaemon(): mNumListeningSockets(1),mRunning(true)
 void TCPDaemon::Start(sockaddr_in trollInfo)
 {
 
-	mTrollInfo = trollInfo;
+	//Inform our TCPPackets where to send all outgoing packets
+	TCPPacket::trollAddrInfo = trollInfo;
 
 	//Setup our sockets
 	mLocalSock = this->setupLocalSocket();
@@ -195,7 +197,7 @@ void TCPDaemon::Stop()
 ssize_t TCPDaemon::sendto(int sockfd, const void *buf, size_t len, int flags,
 		const struct sockaddr *dest_addr, socklen_t addrlen)
 {
-	int bytesSent;
+/*	int bytesSent;
 
 	TrollMessage message;
 	//Copy values into the header
@@ -213,7 +215,7 @@ ssize_t TCPDaemon::sendto(int sockfd, const void *buf, size_t len, int flags,
 
 
 	bytesSent = ::sendto(sockfd, &message, sizeof(message), flags, (struct sockaddr*)&mTrollInfo, sizeof(mTrollInfo));
-	return bytesSent - sizeof(message.header);
+	return bytesSent - sizeof(message.header);*/
 
 
 }
