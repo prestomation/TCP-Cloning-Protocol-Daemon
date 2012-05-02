@@ -67,11 +67,10 @@ TCPConn::TCPConn(TCPDaemon& daemon, ConnectRequestPacket* bindrequest, struct so
 
 
     //send garbage to get the other end to accept
-    theDaemon.sendto(mUDPSocket, mRecvBuf, 0, 0, (struct sockaddr *)&mRemoteInfo, sizeof(mRemoteInfo));
+    TCPPacket outgoingPacket(mRemoteInfo, 0, 0, mRecvBuf, 0);
+    outgoingPacket.send(mUDPSocket);
 
     mState = STANDBY;
-
-
     response.send(mIPCSock, mIPCInfo);
     delete bindrequest;
 }
@@ -96,9 +95,6 @@ void TCPConn::Accept(AcceptRequestPacket* packet)
 void TCPConn::ReceiveData()
 {
     cout << "ReceivedData" << endl;
-    int recvBytes;
-    struct sockaddr_in incomingInfo;
-    int sockaddr_inLen = sizeof(incomingInfo);
 
     if(mState == ACCEPTING)
     {
@@ -110,11 +106,9 @@ void TCPConn::ReceiveData()
         //Unblock the accepting call at the client. 
         AcceptResponsePacket response;
         response.code = 0;
-        //response.connID = mClientSocket;
-        //response.addr = incomingInfo.sin_addr.s_addr;
-        //response.port = ntohs(incomingInfo.sin_port);
-        //response.addr = incomingPacket.header.sin_addr.s_addr;
-        //response.port = ntohs(newMessage.header.sin_port);
+        response.connID = mClientSocket;
+        response.addr = incomingPacket.packet.header.sin_addr.s_addr;
+        response.port = ntohs(incomingPacket.packet.header.sin_port);
         cout << "Sending AcceptResponse" << endl;
         response.send(mIPCSock, mIPCInfo);
         cout << "Going into STANDBY" << endl;
@@ -122,21 +116,16 @@ void TCPConn::ReceiveData()
     }
     else if (mState == RECV)
     {
-        //TCPDaemon::TrollMessage newMessage;
+        TCPPacket incomingPacket(mUDPSocket);
 
-        /*recvBytes = recvfrom(mUDPSocket, &newMessage, sizeof(newMessage), 0, (struct sockaddr *)&incomingInfo, (socklen_t*) &sockaddr_inLen);
 
-        if (recvBytes < 0 )
-        {
-            cout << "No bytes received. This really shouldn't happen.." << endl;
-        }
         RecvResponsePacket response;
-        cout << "WE SHOULD HAVE THIS MANY: " << newMessage.bodysize;
-        memcpy(&response.data, &newMessage.body, newMessage.bodysize);
-        response.size = newMessage.bodysize;
+
+        memcpy(&response.data, &incomingPacket.packet.payload, incomingPacket.packet.payloadsize);
+        response.size = incomingPacket.packet.payloadsize;
         response.send(mIPCSock, mIPCInfo);
         cout << "Going into STANDBY" << endl;
-        mState = STANDBY;*/
+        mState = STANDBY;
     }
 }
 
@@ -156,15 +145,11 @@ void TCPConn::SendRequest(SendRequestPacket* packet)
 
     mState=SEND;
     TCPPacket outgoingPacket(mRemoteInfo, 0, 0, packet->data, packet->size);
-    //int bytesSent = theDaemon.sendto(mUDPSocket, &packet->data, packet->size, 0, (struct sockaddr *)&mRemoteInfo, sizeof(mRemoteInfo));
     int bytesSent = outgoingPacket.send(mUDPSocket);
     SendResponsePacket response;
     response.bytesSent = bytesSent;
     response.send(mIPCSock, mIPCInfo);
     delete packet;
 }
-
-
-
 
 int TCPConn::socketpool = 100;

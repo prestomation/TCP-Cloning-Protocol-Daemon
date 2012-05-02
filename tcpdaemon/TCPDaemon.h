@@ -31,8 +31,6 @@ class TCPDaemon {
 		//Called by a TCPConn() when a local socket is listening for incoming connections
 		//acceptingConn is a pointer back to the associated TCPConn object.
 		void addListeningSocket(int sockfd, TCPConn* acceptingConn);
-		ssize_t sendto(int sockfd, const void *buf, size_t len, int flags,
-				const struct sockaddr *dest_addr, socklen_t addrlen);
 
 	private:
 

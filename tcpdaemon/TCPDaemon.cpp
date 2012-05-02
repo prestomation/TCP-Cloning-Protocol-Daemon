@@ -193,34 +193,6 @@ void TCPDaemon::Stop()
 
 }
 
-
-ssize_t TCPDaemon::sendto(int sockfd, const void *buf, size_t len, int flags,
-		const struct sockaddr *dest_addr, socklen_t addrlen)
-{
-/*	int bytesSent;
-
-	TrollMessage message;
-	//Copy values into the header
-
-	cout << "Sending troll message" << endl;
-	message.header.sin_family = htons(AF_INET);
-	message.header.sin_addr = ((sockaddr_in*)dest_addr)->sin_addr;
-	message.header.sin_port  = ((sockaddr_in*)dest_addr)->sin_port;
-	char ipAddr[INET_ADDRSTRLEN] ;
-	inet_ntop(AF_INET, &message.header.sin_addr.s_addr, ipAddr, INET_ADDRSTRLEN);
-	cout << "Message destined for " <<  ipAddr;
-	message.bodysize = len;
-	memcpy(&message.body, buf, len);
-
-
-
-	bytesSent = ::sendto(sockfd, &message, sizeof(message), flags, (struct sockaddr*)&mTrollInfo, sizeof(mTrollInfo));
-	return bytesSent - sizeof(message.header);*/
-
-
-}
-
-
 IPCPacket* TCPDaemon::ReceivePacket(int sockfd, sockaddr_un* incomingIPCInfo)
 {
 

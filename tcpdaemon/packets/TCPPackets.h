@@ -10,25 +10,29 @@ class TCPPacket
 
     public:
         static struct sockaddr_in trollAddrInfo;
-	TCPPacket(int sock);
-	TCPPacket(sockaddr_in destination, uint32_t  seqnum, uint32_t acknum,  char * payload, int payloadsize);
+        TCPPacket(int sock);
+        TCPPacket(sockaddr_in destination, uint32_t  seqnum, uint32_t acknum,  char * payload, int payloadsize);
         virtual int send(int sockfd);
-        virtual int receive(int sockfd);
 
+
+        struct trollmessage{
+            struct sockaddr_in header;
+            uint32_t seqNum;
+            uint32_t ackNum;
+            short checksum;
+            int payloadsize;
+            char *payload;
+
+        } packet;
 
     private:
-        struct sockaddr_in mHeader;
-        uint32_t mSequenceNum;
-        uint32_t mAckNum;
-        short mChecksum;
-        int mPayloadsize;
-	char *mPayload;
-	enum Direction
-	{
-		STATE_INCOMING,
-		STATE_OUTGOING
-	};
-	Direction mState;
+        enum Direction
+        {
+            STATE_INCOMING,
+            STATE_OUTGOING
+        };
+        Direction mState;
+
 
 
 };
