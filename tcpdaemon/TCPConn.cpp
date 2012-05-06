@@ -65,10 +65,11 @@ TCPConn::TCPConn(TCPDaemon& daemon, ConnectRequestPacket* bindrequest, struct so
         response.port = 0;
     }
 
+    //TODO: Generate random sequence number
 
     //send garbage to get the other end to accept
-    TCPPacket outgoingPacket(mRemoteInfo, 0, 0, mRecvBuf, 0);
-    outgoingPacket.send(mUDPSocket);
+    TCPPacket outgoingPacket(mRemoteInfo, mSeqNum, 0, mRecvBuf, 0, TCPPacket::FLAG_SYN);
+    mSeqNum += outgoingPacket.send(mUDPSocket);
 
     mState = STANDBY;
     response.send(mIPCSock, mIPCInfo);
@@ -111,6 +112,10 @@ void TCPConn::ReceiveData()
         response.port = ntohs(incomingPacket.packet.header.sin_port);
         cout << "Sending AcceptResponse" << endl;
         response.send(mIPCSock, mIPCInfo);
+
+        //This is the initial sequence number as defined by the initiating remote end  + received data(which is 0 in this case)
+        mSeqNum = incomingPacket.packet.seqNum + incomingPacket.packet.payloadsize;
+
         cout << "Going into STANDBY" << endl;
         mState = STANDBY;
     }
@@ -118,12 +123,24 @@ void TCPConn::ReceiveData()
     {
         TCPPacket incomingPacket(mUDPSocket);
 
-
+        if(incomingPacket.packet.seqNum != mSeqNum)
+        {
+            //This is not the seqnum we were expecting...
+            //Drop it.
+            //cout << "WE DROPPED A PACKET" << endl;
+            //return;
+        }
+        //We've received the next packet, increase our sequence number
+        //and ACK the packet
+        mSeqNum += incomingPacket.packet.payloadsize; 
+        sendACK();
         RecvResponsePacket response;
 
         memcpy(&response.data, &incomingPacket.packet.payload, incomingPacket.packet.payloadsize);
         response.size = incomingPacket.packet.payloadsize;
         response.send(mIPCSock, mIPCInfo);
+
+        
         cout << "Going into STANDBY" << endl;
         mState = STANDBY;
     }
@@ -144,12 +161,19 @@ void TCPConn::SendRequest(SendRequestPacket* packet)
     cout << "Going into SEND" << endl;
 
     mState=SEND;
-    TCPPacket outgoingPacket(mRemoteInfo, 0, 0, packet->data, packet->size);
+    TCPPacket outgoingPacket(mRemoteInfo, 0, 0, packet->data, packet->size, TCPPacket::FLAG_ACK);
     int bytesSent = outgoingPacket.send(mUDPSocket);
     SendResponsePacket response;
     response.bytesSent = bytesSent;
     response.send(mIPCSock, mIPCInfo);
     delete packet;
+}
+
+void TCPConn::sendACK()
+{
+
+    TCPPacket outgoingPacket(mRemoteInfo, 0, mSeqNum, 0, 0, TCPPacket::FLAG_ACK);
+    return;
 }
 
 int TCPConn::socketpool = 100;
