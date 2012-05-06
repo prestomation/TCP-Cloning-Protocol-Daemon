@@ -46,6 +46,8 @@ class TCPConn
 
     private:
 
+    //ACKs the just received packet as it is the expected one
+    void sendACK();
     
     enum State{
         STANDBY,
@@ -74,6 +76,9 @@ class TCPConn
 
     //Not currently used fully. Used to create multiple stream sockets from one listening socket
     int mClientSocket;
+
+    //The current sequence number
+    uint32_t mSeqNum;
 
     //The current State of the client(basically which Response packet the client is waiting for )
     State mState;
