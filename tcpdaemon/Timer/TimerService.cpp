@@ -87,8 +87,8 @@ void TimerService::TimeOut(DeltaTimer timer)
         cout << "Found " << iter->seqnum << " owned by " << iter->conn << endl;
         if (iter->seqnum == timer.seqnum && iter->conn == timer.conn )
         {
-            mTimers.erase(iter);
             cout << "Timer "<< iter->seqnum <<" removed due to expiration" << endl;
+            mTimers.erase(iter);
             expiredTimer.conn->ExpireTimer();
             return;
         }

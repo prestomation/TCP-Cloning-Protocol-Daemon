@@ -189,6 +189,12 @@ void TCPConn::ReceiveData()
     }
     else{
         //Else this is an ACK
+        if(anID == "SERVER")
+        {
+            cout << "THIS SHOULDNT HAPPEN. The server received an unknown packet" << endl;
+            sendACK();
+            return;
+        }
 
         cout << anID <<" Received ACK: " << incomingPacket.packet.ackNum << " Sequence num is: " << mSeqNum << endl;
         if(incomingPacket.packet.ackNum > mSeqNum)
@@ -201,10 +207,7 @@ void TCPConn::ReceiveData()
             cout << anID << ": ACK" << endl;
             theDaemon.removeTimer(incomingPacket.packet.ackNum, *this);
             cout << "BUFFER HAS " << mSendBuffer.size() << endl;
-            if(mSendBuffer.empty())
-            {
-                theDaemon.removeAllTimers(*this);
-            }
+
             while(!mSendBuffer.empty())
             {
                 TCPPacket *old = mSendBuffer.front();
@@ -263,6 +266,11 @@ void TCPConn::SendRequest(SendRequestPacket* packet)
 void TCPConn::ExpireTimer()
 {
     cout << anID << ": Expired packet " << ", resending front of the buffer.." << endl;
+    if(mSendBuffer.empty())
+    {
+
+        return;
+    }
     TCPPacket *outgoingPacket  = mSendBuffer.front();
     if(outgoingPacket == NULL)
     {
