@@ -32,6 +32,11 @@ class TCPPacket
 
         } packet;
 
+    uint32_t crc_table[256];
+    uint32_t polynomial;
+    void initCRCTable();
+    uint16_t crc(uint8_t *payload, unsigned int loadsize);
+
     private:
         enum Direction
         {
