@@ -31,7 +31,7 @@ class TCPPacket
         TCPPacket(int sock);
         TCPPacket(sockaddr_in destination, uint32_t  seqnum, uint32_t acknum,  char * payload, int payloadsize, Flags flags);
         TCPPacket(sockaddr_in destination, uint32_t  seqnum, uint32_t acknum);
-        ~TCPPacket();
+        virtual ~TCPPacket();
         virtual int send(int sockfd);
 
 
