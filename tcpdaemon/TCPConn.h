@@ -2,9 +2,12 @@
 #define TCPCONN_H
 
 #include <string>
+#include <queue>
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <sys/un.h> //sockaddr_un 
+
+#include "packets/TCPPackets.h"
 
 class BindRequestPacket;
 class ConnectRequestPacket;
@@ -15,9 +18,14 @@ class AcceptRequestPacket;
 class TCPDaemon;
 class TimerService;
 
+//Our buffer pairs
+//First is the data size, second is the data
+typedef std::pair<int, char[1024]> BufferPair;
+
 //A TCPConn encapsulates all information about a connection between two endpoints
 //It contains an socket connected to the client API domain socket
 //It contains a socket connected to the remote endpoint
+
 
 class TCPConn
 {
@@ -44,16 +52,20 @@ class TCPConn
     //This is called by TCPDaemon when data arrives
     void ReceiveData();
 
+    void ExpireTimer(uint32_t seqnum);
+
     private:
 
     //ACKs the just received packet as it is the expected one
-    void sendACK();
+    void sendACK(TCPPacket::Flags flags = TCPPacket::FLAG_ACK);
     
     enum State{
         STANDBY,
         ACCEPTING,
         RECV,
-        SEND
+        SEND,
+        WAIT,//this is temporary for stop and wait
+        WAITRECV //this is temporary for stop and wait
     };
 
     //Class static var for creating stream sockets on the server end
@@ -80,16 +92,22 @@ class TCPConn
     //The current sequence number
     uint32_t mSeqNum;
 
+    //The other ends sequence number
+    uint32_t mAckNum;
+
     //The current State of the client(basically which Response packet the client is waiting for )
     State mState;
 
-    //TODO: This 1024 is hardcoded
-    //TODO: Circular buffer
-    //TODO: We will probably need a buffer for each substream(multple accept() on a server)
-    //The buffer used to transfer data between data from the UDP socket and the IPC RecvResponse
-    char mRecvBuf[1024];
+    //The buffer between IPC data and send/recv'ing over the wire
+    std::queue<BufferPair> mRecvBuffer;
+    std::queue<TCPPacket*> mSendBuffer;
+
+    
+
     //The number of bytes the client is requesting
     int mRecvSize;
+
+    std::string anID;
 };
 
 

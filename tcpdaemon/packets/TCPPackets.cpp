@@ -33,11 +33,15 @@ TCPPacket::TCPPacket(int sock)
 {
     mState = STATE_INCOMING;
     int recvBytes = ::recvfrom(sock, &packet, sizeof(packet), 0, 0, 0);
-if (recvBytes !=sizeof(packet))
-{
-std::cout << "Unknown packet received. Dropped" << std::endl;
+    if (recvBytes !=sizeof(packet))
+    {
+        std::cout << "Unknown packet received. Dropped" << std::endl;
+    }
+
 }
 
+TCPPacket::~TCPPacket()
+{
 }
 
 int TCPPacket::send(int sock)
@@ -55,6 +59,7 @@ int TCPPacket::send(int sock)
 void TCPPacket::init(sockaddr_in destination, uint32_t seqnum, uint32_t acknum)
 {
 
+    memset( packet.payload, 0, sizeof (packet.payload ));  
 
     packet.header.sin_family = htons(AF_INET);
     packet.header.sin_addr = destination.sin_addr;

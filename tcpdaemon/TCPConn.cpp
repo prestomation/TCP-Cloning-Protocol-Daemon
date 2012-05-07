@@ -9,16 +9,22 @@
 
 using namespace std;
 
+//BindRequest constructor
 TCPConn::TCPConn(TCPDaemon& daemon, BindRequestPacket* bindrequest, struct sockaddr_un IPCInfo, int ipcSock):
-    theDaemon(daemon), mIPCInfo(IPCInfo), mIPCSock(ipcSock)
+    theDaemon(daemon), mIPCInfo(IPCInfo), mIPCSock(ipcSock), mRecvBuffer(), mSendBuffer()
 {
 
+    anID = "SERVER";
+    mAckNum = 0;
+    //TODO: Randomize
+    mSeqNum = 0;
 
     BindResponsePacket response;
 
-    mRemoteInfo.sin_family = AF_INET;
-    mRemoteInfo.sin_addr.s_addr = bindrequest->addr;
-    mRemoteInfo.sin_port = ntohs(bindrequest->port);
+    struct sockaddr_in bindInfo;
+    bindInfo.sin_family = AF_INET;
+    bindInfo.sin_addr.s_addr = bindrequest->addr;
+    bindInfo.sin_port = ntohs(bindrequest->port);
 
     response.addr = bindrequest->addr;
     response.port = bindrequest->port;
@@ -30,7 +36,7 @@ TCPConn::TCPConn(TCPDaemon& daemon, BindRequestPacket* bindrequest, struct socka
     }
 
 
-    if(bind(mUDPSocket, (struct sockaddr *)&mRemoteInfo, sizeof(struct sockaddr_in)) < 0) {
+    if(bind(mUDPSocket, (struct sockaddr *)&bindInfo, sizeof(struct sockaddr_in)) < 0) {
         response.addr = 0;
         response.port = 0;
     }
@@ -42,9 +48,16 @@ TCPConn::TCPConn(TCPDaemon& daemon, BindRequestPacket* bindrequest, struct socka
     delete bindrequest;
 }
 
+//ConnectRequest constructor
 TCPConn::TCPConn(TCPDaemon& daemon, ConnectRequestPacket* bindrequest, struct sockaddr_un IPCInfo, int ipcSock):
     theDaemon(daemon), mIPCInfo(IPCInfo), mIPCSock(ipcSock)
 {
+
+    anID = "CLIENT";
+
+    mAckNum = 0;
+    //TODO: Randomize
+    mSeqNum = 0;
 
     ConnectResponsePacket response;
 
@@ -54,7 +67,7 @@ TCPConn::TCPConn(TCPDaemon& daemon, ConnectRequestPacket* bindrequest, struct so
 
     char ipAddr[INET_ADDRSTRLEN] ;
     inet_ntop(AF_INET, &mRemoteInfo.sin_addr.s_addr, ipAddr, INET_ADDRSTRLEN);
-    cout << "Message destined for " <<  ipAddr;
+    //cout << anID << ": Message destined for " <<  ipAddr;
 
     response.addr = bindrequest->addr;
     response.port = bindrequest->port;
@@ -65,11 +78,16 @@ TCPConn::TCPConn(TCPDaemon& daemon, ConnectRequestPacket* bindrequest, struct so
         response.port = 0;
     }
 
-    //TODO: Generate random sequence number
 
-    //send garbage to get the other end to accept
-    TCPPacket outgoingPacket(mRemoteInfo, mSeqNum, 0, mRecvBuf, 0, TCPPacket::FLAG_SYN);
-    mSeqNum += outgoingPacket.send(mUDPSocket);
+    //send a SYN packet, no data
+    TCPPacket *outgoingPacket = new TCPPacket(mRemoteInfo, mSeqNum, 0, 0, 0, TCPPacket::FLAG_SYN);
+    mSeqNum += 1; //special case
+    outgoingPacket->send(mUDPSocket);
+    mSendBuffer.push(outgoingPacket);
+    theDaemon.addTimer(500, mSeqNum, *this);
+
+    //Listen for packets coming back
+    theDaemon.addListeningSocket(mUDPSocket, this);
 
     mState = STANDBY;
     response.send(mIPCSock, mIPCInfo);
@@ -95,84 +113,170 @@ void TCPConn::Accept(AcceptRequestPacket* packet)
 
 void TCPConn::ReceiveData()
 {
-    cout << "ReceivedData" << endl;
+
+    TCPPacket incomingPacket(mUDPSocket);
+
 
     if(mState == ACCEPTING)
     {
 
-        TCPPacket incomingPacket(mUDPSocket);
-
+        if(incomingPacket.packet.flags != TCPPacket::FLAG_SYN)
+        {
+            cout << "You haven't even syn'd yet, that's rude" << endl;
+            return;
+        }
         mClientSocket = socketpool++;
-        cout << "We are accepting a new connection" << endl;
+        //cout << anID << ": We are accepting a new connection" << endl;
         //Unblock the accepting call at the client. 
         AcceptResponsePacket response;
         response.code = 0;
         response.connID = mClientSocket;
+
+        char ipAddr[INET_ADDRSTRLEN] ;
+        inet_ntop(AF_INET, &incomingPacket.packet.header.sin_addr.s_addr, ipAddr, INET_ADDRSTRLEN);
+
+
         response.addr = incomingPacket.packet.header.sin_addr.s_addr;
         response.port = ntohs(incomingPacket.packet.header.sin_port);
-        cout << "Sending AcceptResponse" << endl;
+
+        mRemoteInfo = incomingPacket.packet.header;
+        cout << anID << " Accepted connection from " << ipAddr << ":" << response.port << endl;
+
+        //cout << "Sending AcceptResponse" << endl;
         response.send(mIPCSock, mIPCInfo);
 
-        //This is the initial sequence number as defined by the initiating remote end  + received data(which is 0 in this case)
-        mSeqNum = incomingPacket.packet.seqNum + incomingPacket.packet.payloadsize;
 
-        cout << "Going into STANDBY" << endl;
+        mAckNum =incomingPacket.packet.seqNum+1; //special case
+        sendACK(TCPPacket::FLAG_SYNACK);
+        cout << anID << ": Going into STANDBY" << endl;
         mState = STANDBY;
     }
     else if (mState == RECV)
     {
-        TCPPacket incomingPacket(mUDPSocket);
 
-        if(incomingPacket.packet.seqNum != mSeqNum)
+
+        cout<< anID <<" Received SEQ: " << incomingPacket.packet.seqNum << " Ack num is: " << mAckNum+incomingPacket.packet.payloadsize << endl;
+        if(incomingPacket.packet.seqNum != (mAckNum+incomingPacket.packet.payloadsize))
         {
-            //This is not the seqnum we were expecting...
-            //Drop it.
-            //cout << "WE DROPPED A PACKET" << endl;
-            //return;
-        }
-        //We've received the next packet, increase our sequence number
-        //and ACK the packet
-        mSeqNum += incomingPacket.packet.payloadsize; 
-        sendACK();
-        RecvResponsePacket response;
+            
+            if(incomingPacket.packet.seqNum < (mAckNum+incomingPacket.packet.payloadsize))
+            {
+                sendACK();
 
+            }
+            //This is NOT the expected packet. Did we miss one? ignore it
+            cout << anID << " dropping packet!" << endl;
+            return;
+        }
+
+        RecvResponsePacket response;
         memcpy(&response.data, &incomingPacket.packet.payload, incomingPacket.packet.payloadsize);
         response.size = incomingPacket.packet.payloadsize;
         response.send(mIPCSock, mIPCInfo);
 
-        
+        //Increase the mAckNum according to the incoming payload
+        mAckNum += incomingPacket.packet.payloadsize;
+        sendACK();
+
         cout << "Going into STANDBY" << endl;
         mState = STANDBY;
+    }
+    else{
+
+        cout << anID <<" Received ACK: " << incomingPacket.packet.ackNum << " Sequence num is: " << mSeqNum << endl;
+        if(incomingPacket.packet.ackNum > mSeqNum)
+        {
+
+            cout << anID << " dropping packet" << endl;
+            return;
+        }
+        else{
+            cout << anID << ": ACK" << endl;
+            if (incomingPacket.packet.ackNum == 1)
+            {
+                //special case for SYNACK
+                incomingPacket.packet.ackNum = 0;
+            }
+            theDaemon.removeTimer(incomingPacket.packet.ackNum, *this);
+            cout << "BUFFER HAS " << mSendBuffer.size() << endl;
+            if(mSendBuffer.empty())
+            {
+                theDaemon.removeAllTimers(*this);
+            }
+            TCPPacket *old = mSendBuffer.front();
+            mSendBuffer.pop();
+            delete old;
+        }
     }
 }
 
 void TCPConn::RecvRequest(RecvRequestPacket* packet)
 {
 
-    cout << "Going into RECV" << endl;
+    cout << anID << " Going into RECV" << endl;
     mState=RECV;
-    mRecvSize = packet->bufsize;
+    //TODO: we're currently not caring how much data the client is asking for 
     //packet->sockid //TODO: We're not differentiating between different accepted sockets on the same listen socket
     delete packet;
 }
 
 void TCPConn::SendRequest(SendRequestPacket* packet)
 {
-    cout << "Going into SEND" << endl;
+    cout << anID << " Going into SEND: " << endl;
 
     mState=SEND;
-    TCPPacket outgoingPacket(mRemoteInfo, 0, 0, packet->data, packet->size, TCPPacket::FLAG_ACK);
-    int bytesSent = outgoingPacket.send(mUDPSocket);
+
+    mSeqNum += packet->size;
+    BufferPair outgoingBuf; //TODO :remove?
+    memset( &outgoingBuf.second, 0, sizeof (outgoingBuf.second ));  
+    outgoingBuf.first = packet->size;
+    memcpy(outgoingBuf.second, packet->data, packet->size);
+    TCPPacket *outgoingPacket = new TCPPacket(mRemoteInfo, mSeqNum, mAckNum, packet->data, packet->size, TCPPacket::FLAG_ACK);
+    mSendBuffer.push(outgoingPacket);
+    int bytesSent = outgoingPacket->send(mUDPSocket);
     SendResponsePacket response;
     response.bytesSent = bytesSent;
     response.send(mIPCSock, mIPCInfo);
-    delete packet;
+
+    theDaemon.addTimer(500, mSeqNum, *this);
+
+    //TODO: for some reason this is seg faulting ? something to do with introducing the buffer queue
+    //delete packet;
 }
 
-void TCPConn::sendACK()
+
+void TCPConn::ExpireTimer(uint32_t seqnum)
+{
+    //TODO:Check seqnum
+    cout << anID << ": Expired packet " << seqnum<<", resending front of the buffer.." << endl;
+    //BufferPair tryAgain = mSendBuffer.front();
+    //TCPPacket outgoingPacket(mRemoteInfo, mSeqNum, mAckNum, tryAgain.second, tryAgain.first, TCPPacket::FLAG_ACK);
+    TCPPacket *outgoingPacket  = mSendBuffer.front();
+    if(outgoingPacket == NULL)
+    {
+        cout << "Buffer is empty" << endl;
+        return;
+    }
+    outgoingPacket->send(mUDPSocket);
+    if(outgoingPacket->packet.seqNum == 0)
+    {
+        outgoingPacket->packet.seqNum = 1;
+    }
+    cout << "EXPIRED PACKET HAS SEQ: " << outgoingPacket->packet.seqNum << " AND ACK: " << outgoingPacket->packet.ackNum << endl;
+
+    theDaemon.addTimer(500, outgoingPacket->packet.seqNum, *this);
+
+}
+
+
+
+
+void TCPConn::sendACK(TCPPacket::Flags flags )
 {
 
-    TCPPacket outgoingPacket(mRemoteInfo, 0, mSeqNum, 0, 0, TCPPacket::FLAG_ACK);
+    TCPPacket outgoingPacket(mRemoteInfo, mSeqNum , mAckNum, 0, 0, flags);
+    cout << anID << " Sending ACK " << mAckNum << "for SEQ " << mSeqNum << endl;
+    outgoingPacket.send(mUDPSocket);
     return;
 }
 
