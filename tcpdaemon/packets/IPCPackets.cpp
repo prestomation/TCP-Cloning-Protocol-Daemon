@@ -217,7 +217,7 @@ int RecvRequestPacket::receive(int sockfd)
 
 int RecvResponsePacket::send(int sockfd, struct sockaddr_un conninfo)
 {
-    //cout << "Sending RecvResponse" << endl;
+    cout << "Sending RecvResponse" << endl;
 
     if(sendto(sockfd, &mOpcode, sizeof(mOpcode), 0,(struct sockaddr *)&conninfo, sizeof(conninfo) ) < 0) {
 

@@ -89,7 +89,7 @@ void TimerService::TimeOut(DeltaTimer timer)
         {
             mTimers.erase(iter);
             cout << "Timer "<< iter->seqnum <<" removed due to expiration" << endl;
-            expiredTimer.conn->ExpireTimer(expiredTimer.seqnum);
+            expiredTimer.conn->ExpireTimer();
             return;
         }
     }

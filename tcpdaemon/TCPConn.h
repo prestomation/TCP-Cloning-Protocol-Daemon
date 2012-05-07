@@ -52,7 +52,7 @@ class TCPConn
     //This is called by TCPDaemon when data arrives
     void ReceiveData();
 
-    void ExpireTimer(uint32_t seqnum);
+    void ExpireTimer();
 
     private:
 
