@@ -40,16 +40,13 @@ class TCPPacket
             Flags flags;
             uint32_t seqNum;
             uint32_t ackNum;
-            short checksum;
+            uint32_t checksum;
             int payloadsize;
             char payload[1024];
 
         } packet;
 
-    uint32_t crc_table[256];
-    uint32_t polynomial;
-    void initCRCTable();
-    uint16_t crc(uint8_t *payload, unsigned int loadsize);
+        bool goodChecksum;
 
     private:
         enum Direction
@@ -60,6 +57,11 @@ class TCPPacket
 
         Direction mState;
         void init(sockaddr_in destination, uint32_t seqnum, uint32_t acknum);
+        void initCRCTable();
+        uint32_t crc(uint8_t *payload, unsigned int loadsize);
+        uint32_t polynomial;
+        static uint32_t crc_table[256];
+        static bool initCRC;
 
 
 

@@ -28,45 +28,48 @@ TCPPacket::TCPPacket(sockaddr_in destination, uint32_t seqnum, uint32_t acknum)
     packet.flags=FLAG_ACK;
 }
 
-//Construcuted with a socket, we are receiving a packet currently on the wire
-TCPPacket::TCPPacket(int sock)
+//Constructed with a socket, we are receiving a packet currently on the wire
+TCPPacket::TCPPacket(int sock): goodChecksum(true)
 {
     mState = STATE_INCOMING;
-<<<<<<< HEAD
+
     ::recvfrom(sock, &packet, sizeof(packet), 0, 0, 0);
 
     // recompute checksum
-    uint16_t originalCRC = packet.checksum; // save incoming checksum
+    uint32_t originalCRC = packet.checksum; // save incoming checksum
     packet.checksum = 0; // erase it
-    packet.checksum =  htonl(crc((uint8_t *)&packet, sizeof(packet))); 
+    sockaddr_in tempHeader = packet.header;
+    memset( &packet.header, 0, sizeof (packet.header ));  
+    packet.checksum =  crc((uint8_t *)&packet, sizeof(packet)); 
+    packet.header = tempHeader;
 
+    std::cout << "Checksum: " << originalCRC << " Computed: " << packet.checksum << std::endl;
     // check to see if original and new crc match
     if (originalCRC != packet.checksum)
     {
-	printf("checksum %d is bad, expected %d\n", packet.checksum, originalCRC);
-    }
-=======
-    int recvBytes = ::recvfrom(sock, &packet, sizeof(packet), 0, 0, 0);
-    if (recvBytes !=sizeof(packet))
-    {
-        std::cout << "Unknown packet received. Dropped" << std::endl;
+        std::cout << "!!!Checksum "<< packet.checksum << " is bad, expected: " << originalCRC << std::endl;;
+        goodChecksum = false;
+
     }
 
 }
 
 TCPPacket::~TCPPacket()
 {
->>>>>>> eac578e98d5e1190efd5d70a2cf847a288f9fdb6
 }
 
 int TCPPacket::send(int sock)
 {
-    initCRCTable(); // make the crc table before use, this should
-		    // probably be moved to the main function to save time
     int bytesSent = 0;
 
     // compute the checksum
-    packet.checksum = htonl(crc((uint8_t *)&packet, sizeof(packet)));
+    packet.checksum = 0;
+
+    sockaddr_in tempHeader = packet.header;
+    memset( &packet.header, 0, sizeof (packet.header ));  
+    packet.checksum =  crc((uint8_t *)&packet, sizeof(packet)); 
+    packet.header = tempHeader;
+    std::cout << "Computed checksum: " << packet.checksum << std::endl;
 
     char * destinet;
     destinet = inet_ntoa(packet.header.sin_addr);
@@ -79,6 +82,11 @@ int TCPPacket::send(int sock)
 void TCPPacket::init(sockaddr_in destination, uint32_t seqnum, uint32_t acknum)
 {
 
+    if(!initCRC)
+    {
+        initCRCTable();
+        initCRC= true;
+    }
     memset( packet.payload, 0, sizeof (packet.payload ));  
 
     packet.header.sin_family = htons(AF_INET);
@@ -95,27 +103,31 @@ struct sockaddr_in TCPPacket::trollAddrInfo;
 // Create table for all possible remainders for ascii values
 void TCPPacket::initCRCTable()
 {
-    polynomial = 0x18005; // Polynomial divisor 17 bit 
+   uint32_t poly = 0xEDB88320L;
     int i, j;
-    for (i = 0; i < 256; i++) { // 256 upper extended ascii value
-        uint16_t crc = i;
-        for (j = 8; j > 0; j--) { // go through the 8 bits of each value
-            if (crc & 1) { // bitwise AND
-                crc = (crc >> 1) ^ polynomial; // bitwise shift right, XOR
+    for (i = 0; i < 256; i++) {
+        uint32_t crc = i;
+        for (j = 8; j > 0; j--) {
+            if (crc & 1) {
+                crc = (crc >> 1) ^ poly;
             } else {
                 crc >>= 1;
             }
         }
-        crc_table[i] = crc; // store
+        crc_table[i] = crc;
     }
 }
 
 // Formula for calculating the crc, done with inverted checksum 
-uint16_t TCPPacket::crc(uint8_t *payload, unsigned int loadsize)
+uint32_t TCPPacket::crc(uint8_t *payload, unsigned int loadsize)
 {
-    uint16_t crc = 0xFFFF; // invert checksum to comply with table
-    uint32_t i;
+    uint32_t i, crc = 0xFFFFFFFF;
     for (i = 0; i < loadsize; i++)
-        crc = ((crc >> 8) & 0x00FF) ^ crc_table[(crc ^ *payload++) & 0xFF];
-    return (crc ^ 0xFFFF); // XOR again
+        crc = ((crc >> 8) & 0x00FFFFFF) ^ crc_table[(crc ^ *payload++) & 0xFF];
+    return (crc ^ 0xFFFFFFFF);
+
 }
+
+uint32_t TCPPacket::crc_table[256];
+bool TCPPacket::initCRC = false;
+

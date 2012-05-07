@@ -115,6 +115,11 @@ void TCPConn::ReceiveData()
 {
 
     TCPPacket incomingPacket(mUDPSocket);
+    if(incomingPacket.goodChecksum == false)
+    {
+        cout << anID << ": dropping packet due to bad checksum" << endl;
+        return;
+    }
 
 
     if(mState == ACCEPTING)
@@ -158,7 +163,7 @@ void TCPConn::ReceiveData()
         cout<< anID <<" Received SEQ: " << incomingPacket.packet.seqNum << " Ack num is: " << mAckNum+incomingPacket.packet.payloadsize << endl;
         if(incomingPacket.packet.seqNum != (mAckNum+incomingPacket.packet.payloadsize))
         {
-            
+
             if(incomingPacket.packet.seqNum < (mAckNum+incomingPacket.packet.payloadsize))
             {
                 sendACK();
@@ -182,6 +187,7 @@ void TCPConn::ReceiveData()
         mState = STANDBY;
     }
     else{
+        //Else this is an ACK
 
         cout << anID <<" Received ACK: " << incomingPacket.packet.ackNum << " Sequence num is: " << mSeqNum << endl;
         if(incomingPacket.packet.ackNum > mSeqNum)
