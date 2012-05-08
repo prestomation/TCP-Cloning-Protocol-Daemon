@@ -132,17 +132,5 @@ class SendResponsePacket : public virtual IPCPacket
         int bytesSent;
 };
 
-/*
-class Data 
-{
-    public:
-        virtual int send(int sockfd, struct sockaddr_un conninfo) = 0;
-        virtual int receive(int sockfd) = 0;
-        Data(char opcode): mOpcode(opcode){}
-        virtual ~IPCPacket(){}
-        char getOpcode();
-    protected:
-        char mOpcode;
-};*/
 
 #endif //IPCPACKETS_H

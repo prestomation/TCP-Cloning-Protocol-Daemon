@@ -52,6 +52,8 @@ class TCPConn
     //This is called by TCPDaemon when data arrives
     void ReceiveData();
 
+    //This is called by the TimerService when a timer owned by this TCPConn expires
+    //This causes the given packet to be retransmitted and a new timer created
     void ExpireTimer();
 
     private:

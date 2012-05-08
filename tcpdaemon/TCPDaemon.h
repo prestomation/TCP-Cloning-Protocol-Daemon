@@ -34,8 +34,16 @@ class TCPDaemon {
 		void addListeningSocket(int sockfd, TCPConn* acceptingConn);
 
 
+        //Double-dispatch for the TimerService. TCPConns' create a new Timer with this method
+        //This allows TCPDaemon to be aware when a new timer is created
         void addTimer(uint32_t time, uint32_t seqNum, TCPConn& theConn);
+
+        //Double-dispatch for the TimerService. TCPConns' remove Timers when a packet is ACK'd
+        //This allows TCPDaemon to be aware when a timer is removed incase the poll() timeout must be changed
         void removeTimer(uint32_t seqNum, TCPConn& theConn);
+
+        
+        //Double-dispatch for the TimerService. TCPConns' remove all timers when a TCPConn is cleaning up
         void removeAllTimers(TCPConn& theConn);
 
         inline
@@ -68,7 +76,9 @@ class TCPDaemon {
         //Receive an incoming IPCPacket 
         IPCPacket* ReceivePacket(int sockfd, sockaddr_un* incoming);
 
+        //The current timer to timeout on
         DeltaTimer mCurrentTimer;
+        //The TimerService instantiation
         TimerService theTimerService;
 
 

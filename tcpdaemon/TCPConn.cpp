@@ -103,7 +103,8 @@ int TCPConn::getSocket()
 
 void TCPConn::Accept(AcceptRequestPacket* packet)
 {
-
+    //The client has indicated that he wantes to accept a new connection
+    //Tell the Daemon to start listening to this socket and change state    
     mState = ACCEPTING;
     theDaemon.addListeningSocket(mUDPSocket, this);
     delete packet;
@@ -113,6 +114,7 @@ void TCPConn::Accept(AcceptRequestPacket* packet)
 void TCPConn::ReceiveData()
 {
 
+    //Pull the packet of the wire
     TCPPacket incomingPacket(mUDPSocket);
     if(incomingPacket.goodChecksum == false)
     {
@@ -126,12 +128,11 @@ void TCPConn::ReceiveData()
 
         if(incomingPacket.packet.flags != TCPPacket::FLAG_SYN)
         {
-            cout << "You haven't even syn'd yet, that's rude" << endl;
+            //We are waiting for a new connection(SYN) but we seemed to have missed it. Drop it and wait for a SYN
             return;
         }
         mClientSocket = socketpool++;
-        //cout << anID << ": We are accepting a new connection" << endl;
-        //Unblock the accepting call at the client. 
+
         AcceptResponsePacket response;
         response.code = 0;
         response.connID = mClientSocket;
@@ -146,9 +147,8 @@ void TCPConn::ReceiveData()
         mRemoteInfo = incomingPacket.packet.header;
         cout << anID << " Accepted connection from " << ipAddr << ":" << response.port << endl;
 
-        //cout << "Sending AcceptResponse" << endl;
+        //Unblock the accepting call at the client. 
         response.send(mIPCSock, mIPCInfo);
-
 
         mAckNum =incomingPacket.packet.seqNum; 
         sendACK(TCPPacket::FLAG_SYNACK);

@@ -32,8 +32,10 @@ The daemon is designed to implement the full interface of the POSIX TCP socket l
 In particular, the final implementation will allow a server to accept() multple times on one socket and recv and send to these multiple streams completely independantly. 
 As of now, the daemon has only been tested for one way communication using a CONNECT() to a corresponding ACCEPT() and pairs of SEND() and RECV()
 
+TCP Features:
+
+
 BUGS:
-There is a slight bug I was not able to work out.Two TCPDaemons running on two separate machines seem to not communicate correctly.
 The software is still able to be tested end to end by running one TCPDaemon and running both ftps and ftpc on the same machine and the troll on any other machine. Information correctly flows from ftpc->TCPDaemon---UDP>Troll---UDP>TCPDaemon->ftps.
 
 FILES:
@@ -46,3 +48,5 @@ tcpdaemon/api.(h|cpp): The IPC client. This is linked into ftpc and ftps. It con
 tcpdaemon/TCPDaemon.(h|cpp): The primary TCPDaemon object. This object poll()s on relevant sockets,creates TCPConn objects, alerts TCPConn objects when data is arriving.
 tcpdaemon/TCPConn.(h|cpp): The TCPConn object encapsulates all information about a "connection". Each end has a corresponding TCPConn object. They are created when a BindRequest or ConnectRequest packet is sent by a client application
 tcpdaemon/packets/IPCPackets.(h|cpp): Contains implementation for all IPCPackets sent between a client and TCPDaemon over domain sockets. Packets sent by a client to the daemon are "Request" packets, and the client blocks until a corressponding "Response" packet is received from the Daemon.
+tcpdaemon/packets/TCPPackets.(h|cpp): Contains implementation for all TCPPackets sent between TCPDaemons. It encapsulates writing and receiving data on the wire and computing and checking the checksum
+tcpdaemon/Timers/TimerService.(h|cpp): Contains implementation for the TimerService and DeltaTimers. DeltaTimers are registered with the TimerService when a packet is sent from a TCPConn. TCPDaemon actually times the timeout with poll() and alerts the TimerService who, in turn, alerts the associated TCPConn
