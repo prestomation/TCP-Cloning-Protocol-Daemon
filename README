@@ -28,17 +28,21 @@ Example Usage:
 [machineb] ./ftps $SERVERPORT 
 [machineb] ./ftps machineb $SERVERPORT afilename 
 
-The daemon is designed to implement the full interface of the POSIX TCP socket layer, but it is not completely implemented.
-In particular, the final implementation will allow a server to accept() multple times on one socket and recv and send to these multiple streams completely independantly. 
-As of now, the daemon has only been tested for one way communication using a CONNECT() to a corresponding ACCEPT() and pairs of SEND() and RECV()
+The daemon is designed to implement the full interface of the POSIX TCP socket layer.
 
 TCP Features:
 
+TWO-WAY-HANDSHAKE:
+The TCP twoway handshake is implemented. When a client connects, it sends a SYN packet and the receiving end responds with a SYNACK
+
+CUMULATIVE ACK:
+Cumulative acks are implemented. This means that if a number of ACKS are lost or corrupted, the next ACK to arrive ACK's all previous packets.
+
+MULTIPLE CLIENTS:
+TCPDaemon can provide service for any number of services running on the local machine to any number of destinations. 
+
 CYClIC REDUNDANCY CHECK (CRC):
 This implementation of tcp uses a cyclic redundancy check to insure data integrity. The implemented crc uses a 32 bit polynomial to generate a 32 bit code. The crc is computed in reverse of normal crc implementations in that the lowest data bit is used to determine the divide. A table of all of the potential 8 bit crc's is computed before hand using each ascii character. This allows for the entire erc to be computed byte by byte or character by character rather than bit by bit.
-
-BUGS:
-The software is still able to be tested end to end by running one TCPDaemon and running both ftps and ftpc on the same machine and the troll on any other machine. Information correctly flows from ftpc->TCPDaemon---UDP>Troll---UDP>TCPDaemon->ftps.
 
 FILES:
 
@@ -52,3 +56,13 @@ tcpdaemon/TCPConn.(h|cpp): The TCPConn object encapsulates all information about
 tcpdaemon/packets/IPCPackets.(h|cpp): Contains implementation for all IPCPackets sent between a client and TCPDaemon over domain sockets. Packets sent by a client to the daemon are "Request" packets, and the client blocks until a corressponding "Response" packet is received from the Daemon.
 tcpdaemon/packets/TCPPackets.(h|cpp): Contains implementation for all TCPPackets sent between TCPDaemons. It encapsulates writing and receiving data on the wire and computing and checking the checksum
 tcpdaemon/Timers/TimerService.(h|cpp): Contains implementation for the TimerService and DeltaTimers. DeltaTimers are registered with the TimerService when a packet is sent from a TCPConn. TCPDaemon actually times the timeout with poll() and alerts the TimerService who, in turn, alerts the associated TCPConn
+
+KNOWN ISSUES:
+Connections are not correctly closed and cleaned up, i.e. there is no TIME_WAIT step. This means that if the receiving end receives the last data that it wants, but the ACK is lost, the initiating end will continue to repeatedly send the last packet forever.
+
+Currently the sockaddr_in header rewritten by the troll is not correctly checksummed. This means that if the sockaddr_in is garbled in transit, the other end will not know. 
+
+Currently, two TCPDaemons on two different machines are not properly communicating due to errors in the checksum logic.
+
+While the final intent is to implement the full socket API, the daemon has only been tested for one way communication using a CONNECT() to a corresponding ACCEPT() and pairs of SEND() and RECV(). Full duplex communication may work, but has not been tested. A listening server is also not able to ACCEPT on multiple connections.
+
