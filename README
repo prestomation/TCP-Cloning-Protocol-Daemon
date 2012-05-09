@@ -34,6 +34,8 @@ As of now, the daemon has only been tested for one way communication using a CON
 
 TCP Features:
 
+CYClIC REDUNDANCY CHECK (CRC):
+This implementation of tcp uses a cyclic redundancy check to insure data integrity. The implemented crc uses a 32 bit polynomial to generate a 32 bit code. The crc is computed in reverse of normal crc implementations in that the lowest data bit is used to determine the divide. A table of all of the potential 8 bit crc's is computed before hand using each ascii character. This allows for the entire erc to be computed byte by byte or character by character rather than bit by bit.
 
 BUGS:
 The software is still able to be tested end to end by running one TCPDaemon and running both ftps and ftpc on the same machine and the troll on any other machine. Information correctly flows from ftpc->TCPDaemon---UDP>Troll---UDP>TCPDaemon->ftps.

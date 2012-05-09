@@ -103,12 +103,14 @@ struct sockaddr_in TCPPacket::trollAddrInfo;
 // Create table for all possible remainders for ascii values
 void TCPPacket::initCRCTable()
 {
-   uint32_t poly = 0xEDB88320L;
+    uint32_t poly = 0xEDB88320L; // initial polynomial
     int i, j;
-    for (i = 0; i < 256; i++) {
+    for (i = 0; i < 256; i++) { // character by character
         uint32_t crc = i;
         for (j = 8; j > 0; j--) {
-            if (crc & 1) {
+	    // least significant bit first this will be
+	    // compensated for in the actuall crc 
+            if (crc & 1) { 
                 crc = (crc >> 1) ^ poly;
             } else {
                 crc >>= 1;
