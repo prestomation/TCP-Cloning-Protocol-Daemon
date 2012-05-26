@@ -43,7 +43,7 @@ TCPPacket::TCPPacket(int sock): goodChecksum(true)
     packet.checksum =  crc((uint8_t *)&packet, sizeof(packet)); 
     packet.header = tempHeader;
 
-    std::cout << "Checksum: " << originalCRC << " Computed: " << packet.checksum << std::endl;
+    //std::cout << "Checksum: " << originalCRC << " Computed: " << packet.checksum << std::endl;
     // check to see if original and new crc match
     if (originalCRC != packet.checksum)
     {
@@ -69,7 +69,7 @@ int TCPPacket::send(int sock)
     memset( &packet.header, 0, sizeof (packet.header ));  
     packet.checksum =  crc((uint8_t *)&packet, sizeof(packet)); 
     packet.header = tempHeader;
-    std::cout << "Computed checksum: " << packet.checksum << std::endl;
+    //std::cout << "Computed checksum: " << packet.checksum << std::endl;
 
     char * destinet;
     destinet = inet_ntoa(packet.header.sin_addr);

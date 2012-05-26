@@ -3,6 +3,7 @@
 
 #include <string>
 #include <queue>
+#include <map>
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <sys/un.h> //sockaddr_un 
@@ -18,9 +19,6 @@ class AcceptRequestPacket;
 class TCPDaemon;
 class TimerService;
 
-//Our buffer pairs
-//First is the data size, second is the data
-typedef std::pair<int, char[1024]> BufferPair;
 
 //A TCPConn encapsulates all information about a connection between two endpoints
 //It contains an socket connected to the client API domain socket
@@ -64,10 +62,10 @@ class TCPConn
     enum State{
         STANDBY,
         ACCEPTING,
+        SYN_SENT,
+        
         RECV,
         SEND,
-        WAIT,//this is temporary for stop and wait
-        WAITRECV //this is temporary for stop and wait
     };
 
     //Class static var for creating stream sockets on the server end
@@ -101,7 +99,7 @@ class TCPConn
     State mState;
 
     //The buffer between IPC data and send/recv'ing over the wire
-    std::queue<BufferPair> mRecvBuffer;
+    std::map<uint32_t, TCPPacket> mRecvBuffer;
     std::queue<TCPPacket*> mSendBuffer;
 
     
@@ -110,6 +108,10 @@ class TCPConn
     int mRecvSize;
 
     std::string anID;
+    int mPacketsInFlight;
+
+    int mRTO;
+    int mSRTT;
 };
 
 

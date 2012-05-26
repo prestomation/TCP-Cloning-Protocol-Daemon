@@ -7,11 +7,13 @@
 #include "packets/TCPPackets.h"
 #include "TCPDaemon.h"
 
+#define WIN_SIZE 20
+
 using namespace std;
 
 //BindRequest constructor
 TCPConn::TCPConn(TCPDaemon& daemon, BindRequestPacket* bindrequest, struct sockaddr_un IPCInfo, int ipcSock):
-    theDaemon(daemon), mIPCInfo(IPCInfo), mIPCSock(ipcSock), mRecvBuffer(), mSendBuffer()
+    theDaemon(daemon), mIPCInfo(IPCInfo), mIPCSock(ipcSock), mRecvBuffer(), mSendBuffer(), mSRTT(10)
 {
 
     anID = "SERVER";
@@ -50,7 +52,7 @@ TCPConn::TCPConn(TCPDaemon& daemon, BindRequestPacket* bindrequest, struct socka
 
 //ConnectRequest constructor
 TCPConn::TCPConn(TCPDaemon& daemon, ConnectRequestPacket* bindrequest, struct sockaddr_un IPCInfo, int ipcSock):
-    theDaemon(daemon), mIPCInfo(IPCInfo), mIPCSock(ipcSock)
+    theDaemon(daemon), mIPCInfo(IPCInfo), mIPCSock(ipcSock), mSRTT(10)
 {
 
     anID = "CLIENT";
@@ -83,12 +85,12 @@ TCPConn::TCPConn(TCPDaemon& daemon, ConnectRequestPacket* bindrequest, struct so
     TCPPacket *outgoingPacket = new TCPPacket(mRemoteInfo, mSeqNum, 0, 0, 0, TCPPacket::FLAG_SYN);
     outgoingPacket->send(mUDPSocket);
     mSendBuffer.push(outgoingPacket);
-    theDaemon.addTimer(100, mSeqNum, *this);
+    theDaemon.addTimer(mSRTT, mSeqNum, *this);
 
     //Listen for packets coming back
     theDaemon.addListeningSocket(mUDPSocket, this);
 
-    mState = STANDBY;
+    mState = SYN_SENT;
     response.send(mIPCSock, mIPCInfo);
     delete bindrequest;
 }
@@ -129,6 +131,7 @@ void TCPConn::ReceiveData()
         if(incomingPacket.packet.flags != TCPPacket::FLAG_SYN)
         {
             //We are waiting for a new connection(SYN) but we seemed to have missed it. Drop it and wait for a SYN
+            cout << anID << ": is ACCEPTING, but this is not a SYN. Drop it.." << endl;
             return;
         }
         mClientSocket = socketpool++;
@@ -159,33 +162,45 @@ void TCPConn::ReceiveData()
     {
 
 
-        cout<< anID <<" Received SEQ: " << incomingPacket.packet.seqNum << " we want: " << mAckNum+incomingPacket.packet.payloadsize << endl;
-        if(incomingPacket.packet.seqNum != (mAckNum+incomingPacket.packet.payloadsize))
+        cout<< anID <<" Received SEQ: " << incomingPacket.packet.seqNum << " we might want: " << mAckNum+incomingPacket.packet.payloadsize << endl;
+        if(incomingPacket.packet.seqNum < (mAckNum+incomingPacket.packet.payloadsize))
         {
-
-            if(incomingPacket.packet.seqNum < (mAckNum+incomingPacket.packet.payloadsize))
-            {
-                cout << anID << ": we've had this packet before, resending ACK" <<endl;
-                sendACK();
-
-            }
-            //This is NOT the expected packet. Did we miss one? ignore it
-            cout << anID << " dropping packet!" << endl;
+            cout << anID << ": we've had this packet before, resending ACK" <<endl;
+            sendACK();
             return;
         }
+        mRecvBuffer.insert(make_pair(incomingPacket.packet.seqNum,  incomingPacket));
 
-        RecvResponsePacket response;
-        memcpy(&response.data, &incomingPacket.packet.payload, incomingPacket.packet.payloadsize);
-        response.size = incomingPacket.packet.payloadsize;
-        response.send(mIPCSock, mIPCInfo);
 
-        //Increase the mAckNum according to the incoming payload
-        cout << anID << ": increasing ACK by " << incomingPacket.packet.payloadsize << endl;
-        mAckNum += incomingPacket.packet.payloadsize;
+        //Ok, now check the other packets we have, and see if they are next
+        map<uint32_t, TCPPacket>::iterator iter = mRecvBuffer.begin();
+        while(iter != mRecvBuffer.end())
+        {
+            if(iter->first == mAckNum+iter->second.packet.payloadsize)
+            {
+                RecvResponsePacket response;
+                memcpy(&response.data, &iter->second.packet.payload, incomingPacket.packet.payloadsize);
+                response.size = iter->second.packet.payloadsize;
+                response.send(mIPCSock, mIPCInfo);
+
+                //Increase the mAckNum according to the incoming payload
+                cout << anID << ": increasing ACK by " << iter->second.packet.payloadsize << endl;
+                mAckNum += iter->second.packet.payloadsize;
+                mRecvBuffer.erase(iter++);
+            }
+            else
+            {
+                cout << anID << ": Next recv buf seq: " << iter->first << " size: " << iter->second.packet.payloadsize << " we have ACK: " << mAckNum << endl;
+                //The map is ordered, so we know we are done
+                break;
+            }
+        }
+
+
         sendACK();
 
-        cout << "Going into STANDBY" << endl;
-        mState = STANDBY;
+        //cout << "Going into STANDBY" << endl;
+        //mState = STANDBY;
     }
     else{
         //Else this is an ACK
@@ -196,14 +211,23 @@ void TCPConn::ReceiveData()
             return;
         }
 
-        cout << anID <<" Received ACK: " << incomingPacket.packet.ackNum << " Sequence num is: " << mSeqNum << endl;
+        cout << anID <<" Received ACK: " << incomingPacket.packet.ackNum << " our seqnum is: " << mSeqNum << endl;
+
+        if (incomingPacket.packet.flags == TCPPacket::FLAG_SYNACK && mState == SYN_SENT)
+        {
+            //Special case of our SYNACK
+            cout << anID << ": Handshake complete!" << endl;
+            mState = STANDBY;
+        }
+
         if(incomingPacket.packet.ackNum > mSeqNum)
         {
 
             cout << anID << " dropping packet" << endl;
             return;
         }
-        else{
+        else
+        {
             cout << anID << ": ACK" << endl;
             theDaemon.removeTimer(incomingPacket.packet.ackNum, *this);
             cout << "BUFFER HAS " << mSendBuffer.size() << endl;
@@ -217,6 +241,7 @@ void TCPConn::ReceiveData()
                     cout << anID << " Deleting Buffer element with SEQ "<< old->packet.seqNum << " as it has been ACK'd" << endl;
                     mSendBuffer.pop();
                     delete old;
+                    mPacketsInFlight--;
                 }
                 else
                 {
@@ -224,6 +249,7 @@ void TCPConn::ReceiveData()
                     break;
                 }
             }
+
         }
     }
 }
@@ -242,45 +268,52 @@ void TCPConn::SendRequest(SendRequestPacket* packet)
 {
     cout << anID << " Going into SEND: " << endl;
 
-    mState=SEND;
+    //mState=SEND;
 
     mSeqNum += packet->size;
-    BufferPair outgoingBuf; //TODO :remove?
-    memset( &outgoingBuf.second, 0, sizeof (outgoingBuf.second ));  
-    outgoingBuf.first = packet->size;
-    memcpy(outgoingBuf.second, packet->data, packet->size);
     TCPPacket *outgoingPacket = new TCPPacket(mRemoteInfo, mSeqNum, mAckNum, packet->data, packet->size, TCPPacket::FLAG_ACK);
     mSendBuffer.push(outgoingPacket);
-    int bytesSent = outgoingPacket->send(mUDPSocket);
-    SendResponsePacket response;
+    //int bytesSent = outgoingPacket->send(mUDPSocket);
+    int bytesSent = packet->size;
+    SendResponsePacket response; //TODO: We should really wait to send this reponse until the packet is acked
     response.bytesSent = bytesSent;
     response.send(mIPCSock, mIPCInfo);
 
-    theDaemon.addTimer(500, mSeqNum, *this);
+    theDaemon.addTimer(mSRTT, mSeqNum, *this);
 
-    //TODO: for some reason this is seg faulting ? something to do with introducing the buffer queue
-    //delete packet;
+    delete packet;
 }
 
 
 void TCPConn::ExpireTimer()
 {
-    cout << anID << ": Expired packet " << ", resending front of the buffer.." << endl;
+
     if(mSendBuffer.empty())
     {
 
         return;
     }
     TCPPacket *outgoingPacket  = mSendBuffer.front();
+    cout << anID << ": Expired packet seq" << outgoingPacket->packet.seqNum <<", resending front of the buffer.." << endl;
     if(outgoingPacket == NULL)
     {
         cout << "Buffer is empty" << endl;
         return;
     }
+    if (mState == SYN_SENT){
+
+        cout << anID << ": still waiting on SYNACK" << endl;
+        if (outgoingPacket->packet.seqNum != 0)
+        {
+            cout << anID << ": Expired packet is not our SYN, so we're not going to send it until the conn is established" << endl;
+            return;
+        }
+    }
     outgoingPacket->send(mUDPSocket);
+    mPacketsInFlight++;
     cout << "EXPIRED PACKET HAS SEQ: " << outgoingPacket->packet.seqNum << " AND ACK: " << outgoingPacket->packet.ackNum << endl;
 
-    theDaemon.addTimer(100, outgoingPacket->packet.seqNum, *this);
+    theDaemon.addTimer(mSRTT, outgoingPacket->packet.seqNum, *this);
 
 }
 
