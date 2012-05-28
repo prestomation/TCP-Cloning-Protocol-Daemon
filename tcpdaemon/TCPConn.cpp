@@ -116,7 +116,7 @@ void TCPConn::Accept(AcceptRequestPacket* packet)
 void TCPConn::ReceiveData()
 {
 
-    //Pull the packet of the wire
+    //Pull the packet off the wire
     TCPPacket incomingPacket(mUDPSocket);
     if(incomingPacket.goodChecksum == false)
     {
@@ -125,82 +125,92 @@ void TCPConn::ReceiveData()
     }
 
 
-    if(mState == ACCEPTING)
+    if (anID == "SERVER")
     {
 
-        if(incomingPacket.packet.flags != TCPPacket::FLAG_SYN)
+        if(mState == ACCEPTING)
         {
-            //We are waiting for a new connection(SYN) but we seemed to have missed it. Drop it and wait for a SYN
-            cout << anID << ": is ACCEPTING, but this is not a SYN. Drop it.." << endl;
-            return;
-        }
-        mClientSocket = socketpool++;
 
-        AcceptResponsePacket response;
-        response.code = 0;
-        response.connID = mClientSocket;
-
-        char ipAddr[INET_ADDRSTRLEN] ;
-        inet_ntop(AF_INET, &incomingPacket.packet.header.sin_addr.s_addr, ipAddr, INET_ADDRSTRLEN);
-
-
-        response.addr = incomingPacket.packet.header.sin_addr.s_addr;
-        response.port = ntohs(incomingPacket.packet.header.sin_port);
-
-        mRemoteInfo = incomingPacket.packet.header;
-        cout << anID << " Accepted connection from " << ipAddr << ":" << response.port << endl;
-
-        //Unblock the accepting call at the client. 
-        response.send(mIPCSock, mIPCInfo);
-
-        mAckNum =incomingPacket.packet.seqNum; 
-        sendACK(TCPPacket::FLAG_SYNACK);
-        cout << anID << ": Going into STANDBY" << endl;
-        mState = STANDBY;
-    }
-    else if (mState == RECV)
-    {
-
-
-        cout<< anID <<" Received SEQ: " << incomingPacket.packet.seqNum << " we might want: " << mAckNum+incomingPacket.packet.payloadsize << endl;
-        if(incomingPacket.packet.seqNum < (mAckNum+incomingPacket.packet.payloadsize))
-        {
-            cout << anID << ": we've had this packet before, resending ACK" <<endl;
-            sendACK();
-            return;
-        }
-        mRecvBuffer.insert(make_pair(incomingPacket.packet.seqNum,  incomingPacket));
-
-
-        //Ok, now check the other packets we have, and see if they are next
-        map<uint32_t, TCPPacket>::iterator iter = mRecvBuffer.begin();
-        while(iter != mRecvBuffer.end())
-        {
-            if(iter->first == mAckNum+iter->second.packet.payloadsize)
+            if(incomingPacket.packet.flags != TCPPacket::FLAG_SYN)
             {
-                RecvResponsePacket response;
-                memcpy(&response.data, &iter->second.packet.payload, incomingPacket.packet.payloadsize);
-                response.size = iter->second.packet.payloadsize;
-                response.send(mIPCSock, mIPCInfo);
+                //We are waiting for a new connection(SYN) but we seemed to have missed it. Drop it and wait for a SYN
+                cout << anID << ": is ACCEPTING, but this is not a SYN. Drop it.." << endl;
+                return;
+            }
+            mClientSocket = socketpool++;
 
-                //Increase the mAckNum according to the incoming payload
-                cout << anID << ": increasing ACK by " << iter->second.packet.payloadsize << endl;
-                mAckNum += iter->second.packet.payloadsize;
-                mRecvBuffer.erase(iter++);
+            AcceptResponsePacket response;
+            response.code = 0;
+            response.connID = mClientSocket;
+
+            char ipAddr[INET_ADDRSTRLEN] ;
+            inet_ntop(AF_INET, &incomingPacket.packet.header.sin_addr.s_addr, ipAddr, INET_ADDRSTRLEN);
+
+
+            response.addr = incomingPacket.packet.header.sin_addr.s_addr;
+            response.port = ntohs(incomingPacket.packet.header.sin_port);
+
+            mRemoteInfo = incomingPacket.packet.header;
+            cout << anID << " Accepted connection from " << ipAddr << ":" << response.port << endl;
+
+            //Unblock the accepting call at the client. 
+            response.send(mIPCSock, mIPCInfo);
+
+            mAckNum =incomingPacket.packet.seqNum; 
+            sendACK(TCPPacket::FLAG_SYNACK);
+            cout << anID << ": Going into STANDBY" << endl;
+            mState = STANDBY;
+        }
+        else 
+        {
+            if(incomingPacket.packet.flags == TCPPacket::FLAG_SYN)
+            {
+                //This is a duplication of the SYN packet, drop it
+                cout << anID << ": ReACKing SYN duplicate" << endl;
+                sendACK(TCPPacket::FLAG_SYNACK);
+                return;
+            }   
+
+
+            cout<< anID <<" Received SEQ: " << incomingPacket.packet.seqNum << " we might want: " << mAckNum+incomingPacket.packet.payloadsize << endl;
+            if(incomingPacket.packet.seqNum < (mAckNum+incomingPacket.packet.payloadsize))
+            {
+                //This is a duplicate, just drop it about it, but send an ACK
+                cout << anID << ": we've had this packet before, resending ACK" <<endl;
+                sendACK();
+                return;
+            }
+
+
+
+            if(incomingPacket.packet.seqNum == (mAckNum + incomingPacket.packet.payloadsize))
+            {
+                //This is the same packet, increase our ACK
+                cout << anID << ": increasing ACK by " << incomingPacket.packet.payloadsize << endl;
+                mAckNum += incomingPacket.packet.payloadsize;
+
+                if(mState == RECV)
+                {
+                    //If this is the next packet we want, and the client is blocked, then send him some data!
+
+                    cout << anID << ":We shouldn't have anything in our recv buffer, but it has this many: " << mRecvBuffer.size() << endl;
+
+                    cout << anID << ": Our server is currently blocked, send him data now" << endl;
+                    RecvResponsePacket response;
+                    memcpy(&response.data, &incomingPacket.packet.payload, incomingPacket.packet.payloadsize);
+                    response.size = incomingPacket.packet.payloadsize;
+                    response.send(mIPCSock, mIPCInfo);
+                    mState = STANDBY;
+                }
             }
             else
             {
-                cout << anID << ": Next recv buf seq: " << iter->first << " size: " << iter->second.packet.payloadsize << " we have ACK: " << mAckNum << endl;
-                //The map is ordered, so we know we are done
-                break;
+                //This wasn't the next packet, so keep it in our buffer
+                mRecvBuffer.insert(make_pair(incomingPacket.packet.seqNum,  incomingPacket));
             }
+            sendACK();
+
         }
-
-
-        sendACK();
-
-        //cout << "Going into STANDBY" << endl;
-        //mState = STANDBY;
     }
     else{
         //Else this is an ACK
@@ -261,6 +271,37 @@ void TCPConn::RecvRequest(RecvRequestPacket* packet)
     mState=RECV;
     //TODO: we're currently not caring how much data the client is asking for 
     //packet->sockid //TODO: We're not differentiating between different accepted sockets on the same listen socket
+    if(mRecvBuffer.size() > 0)
+    {
+        //There's data in the buffer, send it back immediately if it's the next packet
+        cout << anID << " data is available" << endl;
+
+
+        map<uint32_t, TCPPacket>::iterator iter = mRecvBuffer.begin();
+        TCPPacket nextPacket = iter->second;
+        if(nextPacket.packet.seqNum < mAckNum)
+        {
+
+            cout << anID << "..and that data is next. send RecvResponse " << endl;
+            //This is the next packet, send data to the client
+            RecvResponsePacket response;
+            memcpy(&response.data, &nextPacket.packet.payload, nextPacket.packet.payloadsize);
+            response.size = nextPacket.packet.payloadsize;
+            response.send(mIPCSock, mIPCInfo);
+            mRecvBuffer.erase(iter);
+            mState=STANDBY;
+        }
+        else
+        {
+
+            cout << anID << "..and that data is NOT next, block the client.. " << endl;
+        }
+
+    }
+    else
+    {
+        cout << anID << ": no data available, block" << endl;
+    }
     delete packet;
 }
 
@@ -290,16 +331,13 @@ void TCPConn::ExpireTimer()
 
     if(mSendBuffer.empty())
     {
+        cout << anID << ": Timer expired, but buffer is empty" << endl;
 
         return;
     }
     TCPPacket *outgoingPacket  = mSendBuffer.front();
     cout << anID << ": Expired packet seq" << outgoingPacket->packet.seqNum <<", resending front of the buffer.." << endl;
-    if(outgoingPacket == NULL)
-    {
-        cout << "Buffer is empty" << endl;
-        return;
-    }
+    theDaemon.addTimer(mSRTT, outgoingPacket->packet.seqNum, *this);
     if (mState == SYN_SENT){
 
         cout << anID << ": still waiting on SYNACK" << endl;
@@ -313,7 +351,6 @@ void TCPConn::ExpireTimer()
     mPacketsInFlight++;
     cout << "EXPIRED PACKET HAS SEQ: " << outgoingPacket->packet.seqNum << " AND ACK: " << outgoingPacket->packet.ackNum << endl;
 
-    theDaemon.addTimer(mSRTT, outgoingPacket->packet.seqNum, *this);
 
 }
 
