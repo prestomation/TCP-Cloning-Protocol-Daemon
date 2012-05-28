@@ -32,7 +32,8 @@ class TCPDaemon {
 		//Called by a TCPConn() when a local socket is listening for incoming connections
 		//acceptingConn is a pointer back to the associated TCPConn object.
 		void addListeningSocket(int sockfd, TCPConn* acceptingConn);
-
+                //Called by TCPConn() to remove a listening socket
+		void removeListeningSocket(int sockfd, TCPConn* acceptingConn);
 
         //Double-dispatch for the TimerService. TCPConns' create a new Timer with this method
         //This allows TCPDaemon to be aware when a new timer is created
@@ -54,9 +55,6 @@ class TCPDaemon {
 
     private:
 
-        //TODO:Do this better, we shouldn't have a max
-        //We are setting a max of 50 here
-        pollfd mListeningSockets[50];
         int mNumListeningSockets;
 
         bool mRunning;

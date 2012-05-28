@@ -300,8 +300,38 @@ int RECV(int sockfd, void *buf, size_t len, int flags){
 int CLOSE(int sockfd){
 
     cout << "CLOSE" << endl;
-    //TODO: Send a close packet and receive the response
-    return 0;
+    CloseRequestPacket request;
+
+    request.sockid = sockfd;
+    int ipcsock;
+
+    //If this is an accepted socket, find what the actual socket is
+    if (acceptedConnMap.count(sockfd) == 1)
+    {
+        //This is an accepted connection
+        ipcsock = acceptedConnMap[sockfd] ;
+    }
+    else
+    {
+        //This is a direct connection
+        ipcsock = sockfd; 
+    }
+
+    request.send(ipcsock, ipcConnMap[ipcsock]);
+
+    CloseResponsePacket response;
+
+    char opcode;
+    //block, waiting for a response..
+    if((opcode =recvOpcode(ipcsock) )!= OPCODE_CLOSE_RESPONSE)
+    {
+        cout << "Unexcepted Opcode:" << (char)(opcode + 49) << endl;
+
+        return -1;
+    }
+    response.receive(ipcsock);
+
+    return response.status;
 }
 
 
