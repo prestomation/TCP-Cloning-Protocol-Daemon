@@ -131,6 +131,24 @@ class SendResponsePacket : public virtual IPCPacket
         SendResponsePacket();
         int bytesSent;
 };
+class CloseRequestPacket : public virtual IPCPacket
+{
+public:
+    int send(int sockfd, struct sockaddr_un conninfo);
+    int receive(int sockfd);
+    CloseRequestPacket();
+    int sockid;
+
+};
+class CloseResponsePacket : public virtual IPCPacket
+{
+public:
+    int send(int sockfd, struct sockaddr_un conninfo);
+    int receive(int sockfd);
+    CloseResponsePacket();
+    int sockid;
+
+};
 
 
 #endif //IPCPACKETS_H

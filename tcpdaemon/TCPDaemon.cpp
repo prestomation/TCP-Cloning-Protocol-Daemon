@@ -243,6 +243,13 @@ IPCPacket* TCPDaemon::ReceivePacket(int sockfd, sockaddr_un* incomingIPCInfo)
         packet->receive(sockfd); 
         return packet;
     }
+    if (opcode == OPCODE_CLOSE_REQUEST)
+    {
+        cout << "Received Close Request" << endl;
+        CloseRequestPacket* packet = new CloseRequestPacket;
+        packet->receive(sockfd); 
+        return packet;
+    }
     return NULL;
 
 }

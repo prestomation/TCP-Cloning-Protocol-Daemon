@@ -11,8 +11,10 @@
 #include "packets/TCPPackets.h"
 
 class BindRequestPacket;
+class CloseRequestPacket;
 class ConnectRequestPacket;
 class BindResponsePacket;
+class CloseReponsePacket;
 class RecvRequestPacket;
 class SendRequestPacket;
 class AcceptRequestPacket;

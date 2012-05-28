@@ -314,6 +314,43 @@ int SendResponsePacket::receive(int sockfd)
     return 0;
 }
 
+int CloseResponsePacket::send(int sockfd, sockaddr_un conninfo)
+{
+
+	return 0;
+}
+
+int CloseResponsePacket::receive(int sockfd)
+{
+
+	return 0;
+}
+
+int CloseRequestPacket::send(int sockfd, struct sockaddr_un conninfo)
+{
+    cout << "Sending CloseRequest" << endl;
+
+    if(sendto(sockfd, &mOpcode, sizeof(mOpcode), 0,(struct sockaddr *)&conninfo, sizeof(conninfo) ) < 0) {
+        return -1;
+    }   
+
+    if(sendto(sockfd, &sockid, sizeof(sockfd), 0,(struct sockaddr *)&conninfo, sizeof(conninfo) ) < 0) {
+        return -1;
+    }   
+ 
+    return 0;
+}
+
+int CloseRequestPacket::receive(int sockfd)
+{
+    if(recv(sockfd, &sockid, sizeof(sockfd), 0) < 0 )
+    {
+        return -1;
+    }   
+
+    return 0;
+}
+
 //The following constructors set opcodes
 BindRequestPacket::BindRequestPacket(): IPCPacket(OPCODE_BIND_REQUEST){}
 BindResponsePacket::BindResponsePacket(): IPCPacket(OPCODE_BIND_RESPONSE){}
@@ -325,6 +362,8 @@ RecvRequestPacket::RecvRequestPacket() : IPCPacket(OPCODE_RECV_REQUEST){}
 RecvResponsePacket::RecvResponsePacket() : IPCPacket(OPCODE_RECV_RESPONSE){}
 SendRequestPacket::SendRequestPacket() : IPCPacket(OPCODE_SEND_REQUEST){}
 SendResponsePacket::SendResponsePacket() : IPCPacket(OPCODE_SEND_RESPONSE){}
+CloseResponsePacket::CloseResponsePacket() : IPCPacket(OPCODE_CLOSE_RESPONSE){}
+CloseRequestPacket::CloseRequestPacket() : IPCPacket(OPCODE_CLOSE_REQUEST){}
  
 
 
