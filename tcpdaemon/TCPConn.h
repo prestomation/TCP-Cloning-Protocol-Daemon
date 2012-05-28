@@ -2,7 +2,7 @@
 #define TCPCONN_H
 
 #include <string>
-#include <queue>
+#include <deque>
 #include <map>
 #include <netinet/in.h>
 #include <sys/socket.h>
@@ -102,7 +102,7 @@ class TCPConn
 
     //The buffer between IPC data and send/recv'ing over the wire
     std::map<uint32_t, TCPPacket> mRecvBuffer;
-    std::queue<TCPPacket*> mSendBuffer;
+    std::deque<TCPPacket*> mSendBuffer;
 
     
 
@@ -114,6 +114,8 @@ class TCPConn
 
     int mRTO;
     int mSRTT;
+    uint32_t mCurrentPacketNum;
+    uint32_t mLastPacketNum;
 };
 
 
