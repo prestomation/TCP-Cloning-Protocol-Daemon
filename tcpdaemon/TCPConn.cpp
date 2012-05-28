@@ -1,4 +1,5 @@
 #include <iostream>
+#include <sys/time.h>
 #include <stack>
 #include <sys/un.h> //sockaddr_un, 
 #include <arpa/inet.h> //inet_ntop
@@ -10,12 +11,13 @@
 
 #define WIN_SIZE 20
 #define RTO_U 4
+#define SMOOTHING_FACTOR 0.9
 
 using namespace std;
 
 //BindRequest constructor
 TCPConn::TCPConn(TCPDaemon& daemon, BindRequestPacket* bindrequest, struct sockaddr_un IPCInfo, int ipcSock):
-    theDaemon(daemon), mIPCInfo(IPCInfo), mIPCSock(ipcSock), mRecvBuffer(), mSendBuffer(), mSRTT(10)
+    theDaemon(daemon), mIPCInfo(IPCInfo), mIPCSock(ipcSock), mRecvBuffer(), mSendBuffer(), mSRTT(1000)
 {
     anID = "SERVER";
     mAckNum = 0;
@@ -53,7 +55,7 @@ TCPConn::TCPConn(TCPDaemon& daemon, BindRequestPacket* bindrequest, struct socka
 
 //ConnectRequest constructor
 TCPConn::TCPConn(TCPDaemon& daemon, ConnectRequestPacket* bindrequest, struct sockaddr_un IPCInfo, int ipcSock):
-    theDaemon(daemon), mIPCInfo(IPCInfo), mIPCSock(ipcSock), mSRTT(10)
+    theDaemon(daemon), mIPCInfo(IPCInfo), mIPCSock(ipcSock), mSRTT(1000)
 {
 
     anID = "CLIENT";
@@ -86,7 +88,7 @@ TCPConn::TCPConn(TCPDaemon& daemon, ConnectRequestPacket* bindrequest, struct so
     TCPPacket *outgoingPacket = new TCPPacket(mRemoteInfo, mSeqNum, 0, 0, 0, TCPPacket::FLAG_SYN);
     outgoingPacket->send(mUDPSocket);
     mSendBuffer.push_back(outgoingPacket);
-    theDaemon.addTimer(mSRTT, mSeqNum, *this);
+    theDaemon.addTimer(mSRTT/1000.0, mSeqNum, *this);
 
     //Listen for packets coming back
     theDaemon.addListeningSocket(mUDPSocket, this);
@@ -245,6 +247,16 @@ void TCPConn::ReceiveData()
             theDaemon.removeTimer(incomingPacket.packet.ackNum, *this);
             cout << "BUFFER HAS " << mSendBuffer.size() << endl;
 
+            //SRTT calculation. 
+            //SRTT is only updated if it's the first time an ack is encountered
+            
+            timeval now;
+            gettimeofday(&now, 0);
+            uint32_t timeDiff = (now.tv_usec - mLastTickTimeUSec);
+            cout << anID << ": We received at at " << now.tv_usec/1000<< " for a RTT of: " << timeDiff << endl;
+            mSRTT = SMOOTHING_FACTOR * mSRTT  + (1.0-SMOOTHING_FACTOR) * timeDiff;
+            cout << anID << ": SRTT calculated as " << mSRTT << endl;
+
             while(!mSendBuffer.empty())
             {
                 TCPPacket *old = mSendBuffer.front();
@@ -326,7 +338,7 @@ void TCPConn::SendRequest(SendRequestPacket* packet)
     response.bytesSent = bytesSent;
     response.send(mIPCSock, mIPCInfo);
 
-    theDaemon.addTimer(mSRTT, mSeqNum, *this);
+    theDaemon.addTimer(1.0, mSeqNum, *this);
 
     delete packet;
 }
@@ -337,21 +349,19 @@ void TCPConn::ExpireTimer()
 {
 
 
+
     TCPPacket* outgoingPacket = mSendBuffer.front();
-    //int RTO = mSRTT = RTO_U *
+    int RTO = mSRTT * 2;
+    cout << anID << " RTO: " << RTO / 1000.0 << endl;
 
     //We always reset the timer for our SRTT
-    theDaemon.addTimer(mSRTT, outgoingPacket->packet.seqNum, *this);
+    theDaemon.addTimer(RTO/1000.0, outgoingPacket->packet.seqNum, *this);
 
     stack<TCPPacket*> tmpStack;
 
     cout << anID << ": timer expired, send our window" << endl;
     while(!mSendBuffer.empty() && mSendBuffer.front()->packetNumber < mCurrentPacketNum + 20)
     {
-
-
-
-
 
         //Room is available in the window, send some packets
         //Pop our next packet and put it on our temp stack
@@ -378,6 +388,10 @@ void TCPConn::ExpireTimer()
         mSendBuffer.push_front(tmpStack.top());
         tmpStack.pop();
     }
+    timeval now;
+    gettimeofday(&now, 0);
+    mLastTickTimeUSec =  now.tv_usec;
+    cout << anID << ": We sent window at " << mLastTickTimeUSec / 1000 << endl;
 
 }
 

@@ -74,7 +74,6 @@ void TCPDaemon::Start(sockaddr_in trollInfo)
 
 			if (listeningSockets[0].revents & POLLIN)
 			{
-				cout << "IPC traffic" <<endl;
 				//mLocalSock traffic
 
 				struct sockaddr_un incomingIPCInfo;

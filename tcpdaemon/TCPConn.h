@@ -116,6 +116,8 @@ class TCPConn
     int mSRTT;
     uint32_t mCurrentPacketNum;
     uint32_t mLastPacketNum;
+
+    uint32_t mLastTickTimeUSec;
 };
 
 

@@ -15,11 +15,35 @@ void TimerService::addTimer(uint32_t time, uint32_t seqNum, TCPConn& theConn)
     DeltaTimer newTimer(time, seqNum, &theConn);
     if( mTimers.empty())
     {
+        //If we have no timers, set daemon timeout and return
         theDaemon.setNextTimeout(newTimer);
         cout << "Resetting timeout first timer" << endl;
+        mTimers.push_back(newTimer);
+        return;
     }
+
+    uint32_t timeDiff = time;
+    list<DeltaTimer>::iterator iter = mTimers.begin();
+    //cout << "Looking for " << seqNum << " owned by " << &theConn << endl;
+
+    while(iter != mTimers.end())
+    {
+            if(timeDiff < iter->time)
+            {
+                //cout << "timeDiff: " << timeDiff <<" less than itertime: " << iter->time << endl;
+                newTimer.time = timeDiff;
+                mTimers.insert(iter, newTimer);
+                //cout << "Timer " << seqNum << " added with time:"<< timeDiff << endl;
+                iter->time -= timeDiff;
+                return;
+            }
+            timeDiff -= iter->time;
+            iter++;
+    }
+
     mTimers.push_back(newTimer);
-    cout << "Timer added " << seqNum <<endl;
+
+    cout << "Timer added to end" << seqNum <<endl;
 
 
 
@@ -28,10 +52,10 @@ void TimerService::addTimer(uint32_t time, uint32_t seqNum, TCPConn& theConn)
 void TimerService::removeTimer(uint32_t seqNum, TCPConn& theConn)
 {
     list<DeltaTimer>::iterator iter = mTimers.begin();
-    cout << "Looking for " << seqNum << " owned by " << &theConn << endl;
+    //cout << "Looking for " << seqNum << " owned by " << &theConn << endl;
     while(iter != mTimers.end())
     {
-        cout << "Found " << iter->seqnum << " owned by " << iter->conn << endl;
+        //cout << "Found " << iter->seqnum << " owned by " << iter->conn << endl;
         if (iter->seqnum <= seqNum && iter->conn == &theConn )
         {
             cout << "Timer removed "<< iter->seqnum << endl;
@@ -84,7 +108,7 @@ void TimerService::TimeOut(DeltaTimer timer)
     cout << "Looking for " << timer.seqnum << " owned by " << timer.conn << endl;
     for(iter = mTimers.begin(); iter != mTimers.end(); iter++)
     {
-        cout << "Found " << iter->seqnum << " owned by " << iter->conn << endl;
+        //cout << "Found " << iter->seqnum << " owned by " << iter->conn << endl;
         if (iter->seqnum == timer.seqnum && iter->conn == timer.conn )
         {
             cout << "Timer "<< iter->seqnum <<" removed due to expiration" << endl;
