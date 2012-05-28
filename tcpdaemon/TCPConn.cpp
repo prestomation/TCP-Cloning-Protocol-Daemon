@@ -1,4 +1,5 @@
 #include <iostream>
+#include <stack>
 #include <sys/un.h> //sockaddr_un, 
 #include <arpa/inet.h> //inet_ntop
 
@@ -8,6 +9,7 @@
 #include "TCPDaemon.h"
 
 #define WIN_SIZE 20
+#define RTO_U 4
 
 using namespace std;
 
@@ -15,7 +17,6 @@ using namespace std;
 TCPConn::TCPConn(TCPDaemon& daemon, BindRequestPacket* bindrequest, struct sockaddr_un IPCInfo, int ipcSock):
     theDaemon(daemon), mIPCInfo(IPCInfo), mIPCSock(ipcSock), mRecvBuffer(), mSendBuffer(), mSRTT(10)
 {
-
     anID = "SERVER";
     mAckNum = 0;
     //TODO: Randomize
@@ -84,7 +85,7 @@ TCPConn::TCPConn(TCPDaemon& daemon, ConnectRequestPacket* bindrequest, struct so
     //send a SYN packet, no data
     TCPPacket *outgoingPacket = new TCPPacket(mRemoteInfo, mSeqNum, 0, 0, 0, TCPPacket::FLAG_SYN);
     outgoingPacket->send(mUDPSocket);
-    mSendBuffer.push(outgoingPacket);
+    mSendBuffer.push_back(outgoingPacket);
     theDaemon.addTimer(mSRTT, mSeqNum, *this);
 
     //Listen for packets coming back
@@ -125,6 +126,7 @@ void TCPConn::ReceiveData()
     }
 
 
+    //TODO: don't differentiate like this. client and server should act the same
     if (anID == "SERVER")
     {
 
@@ -178,7 +180,8 @@ void TCPConn::ReceiveData()
                 //This is a duplicate, just drop it about it, but send an ACK
                 cout << anID << ": we've had this packet before, resending ACK" <<endl;
                 sendACK();
-                return;
+                if(mRecvBuffer.size() > 0)
+                    return;
             }
 
 
@@ -202,11 +205,11 @@ void TCPConn::ReceiveData()
                     response.send(mIPCSock, mIPCInfo);
                     mState = STANDBY;
                 }
-            }
-            else
-            {
-                //This wasn't the next packet, so keep it in our buffer
-                mRecvBuffer.insert(make_pair(incomingPacket.packet.seqNum,  incomingPacket));
+                else
+                {
+                    //Client isn't waiting for data, so store it
+                    mRecvBuffer.insert(make_pair(incomingPacket.packet.seqNum,  incomingPacket));
+                }
             }
             sendACK();
 
@@ -226,7 +229,7 @@ void TCPConn::ReceiveData()
         if (incomingPacket.packet.flags == TCPPacket::FLAG_SYNACK && mState == SYN_SENT)
         {
             //Special case of our SYNACK
-            cout << anID << ": Handshake complete!" << endl;
+            cout << anID << ": SYN Handshake complete!" << endl;
             mState = STANDBY;
         }
 
@@ -249,9 +252,9 @@ void TCPConn::ReceiveData()
                 {
                     //Remove everything in the buffer that has been ack'ed 
                     cout << anID << " Deleting Buffer element with SEQ "<< old->packet.seqNum << " as it has been ACK'd" << endl;
-                    mSendBuffer.pop();
+                    mSendBuffer.pop_front();
                     delete old;
-                    mPacketsInFlight--;
+                    mCurrentPacketNum++;
                 }
                 else
                 {
@@ -279,10 +282,11 @@ void TCPConn::RecvRequest(RecvRequestPacket* packet)
 
         map<uint32_t, TCPPacket>::iterator iter = mRecvBuffer.begin();
         TCPPacket nextPacket = iter->second;
-        if(nextPacket.packet.seqNum < mAckNum)
+        if(nextPacket.packet.seqNum <= mAckNum)
         {
 
             cout << anID << "..and that data is next. send RecvResponse " << endl;
+            cout << anID << " next seqNum: " << nextPacket.packet.seqNum << " our ack: " << mAckNum << endl;
             //This is the next packet, send data to the client
             RecvResponsePacket response;
             memcpy(&response.data, &nextPacket.packet.payload, nextPacket.packet.payloadsize);
@@ -295,6 +299,7 @@ void TCPConn::RecvRequest(RecvRequestPacket* packet)
         {
 
             cout << anID << "..and that data is NOT next, block the client.. " << endl;
+            cout << anID << " next seqNum: " << nextPacket.packet.seqNum << " our ack: " << mAckNum << endl;
         }
 
     }
@@ -313,10 +318,11 @@ void TCPConn::SendRequest(SendRequestPacket* packet)
 
     mSeqNum += packet->size;
     TCPPacket *outgoingPacket = new TCPPacket(mRemoteInfo, mSeqNum, mAckNum, packet->data, packet->size, TCPPacket::FLAG_ACK);
-    mSendBuffer.push(outgoingPacket);
+    outgoingPacket->packetNumber = ++mLastPacketNum;
+    mSendBuffer.push_back(outgoingPacket);
     //int bytesSent = outgoingPacket->send(mUDPSocket);
     int bytesSent = packet->size;
-    SendResponsePacket response; //TODO: We should really wait to send this reponse until the packet is acked
+    SendResponsePacket response; 
     response.bytesSent = bytesSent;
     response.send(mIPCSock, mIPCInfo);
 
@@ -326,31 +332,52 @@ void TCPConn::SendRequest(SendRequestPacket* packet)
 }
 
 
+//This is where we actually put data packets on the wire
 void TCPConn::ExpireTimer()
 {
 
-    if(mSendBuffer.empty())
-    {
-        cout << anID << ": Timer expired, but buffer is empty" << endl;
 
-        return;
-    }
-    TCPPacket *outgoingPacket  = mSendBuffer.front();
-    cout << anID << ": Expired packet seq" << outgoingPacket->packet.seqNum <<", resending front of the buffer.." << endl;
+    TCPPacket* outgoingPacket = mSendBuffer.front();
+    //int RTO = mSRTT = RTO_U *
+
+    //We always reset the timer for our SRTT
     theDaemon.addTimer(mSRTT, outgoingPacket->packet.seqNum, *this);
-    if (mState == SYN_SENT){
 
-        cout << anID << ": still waiting on SYNACK" << endl;
-        if (outgoingPacket->packet.seqNum != 0)
-        {
-            cout << anID << ": Expired packet is not our SYN, so we're not going to send it until the conn is established" << endl;
-            return;
+    stack<TCPPacket*> tmpStack;
+
+    cout << anID << ": timer expired, send our window" << endl;
+    while(!mSendBuffer.empty() && mSendBuffer.front()->packetNumber < mCurrentPacketNum + 20)
+    {
+
+
+
+
+
+        //Room is available in the window, send some packets
+        //Pop our next packet and put it on our temp stack
+        tmpStack.push(mSendBuffer.front());
+        mSendBuffer.pop_front();
+
+        if (mState == SYN_SENT){
+            //Special case for while we're wating for SYNACK, don't send data packets
+
+            cout << anID << ": still waiting on SYNACK" << endl;
+            if (tmpStack.top()->packet.seqNum != 0)
+            {
+                cout << anID << ": Expired packet is not our SYN, so we're not going to send it until the conn is established" << endl;
+                break;
+            }
         }
-    }
-    outgoingPacket->send(mUDPSocket);
-    mPacketsInFlight++;
-    cout << "EXPIRED PACKET HAS SEQ: " << outgoingPacket->packet.seqNum << " AND ACK: " << outgoingPacket->packet.ackNum << endl;
 
+        cout << anID << ": sending a packet" << endl;
+        tmpStack.top()->send(mUDPSocket);
+    }
+    //Ok, now our whole window is in flight, put these packets back in our buffer so they can be ACK'd or resent
+    while(!tmpStack.empty())
+    {
+        mSendBuffer.push_front(tmpStack.top());
+        tmpStack.pop();
+    }
 
 }
 

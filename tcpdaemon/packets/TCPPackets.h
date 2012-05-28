@@ -63,8 +63,9 @@ class TCPPacket
 
         } packet;
 
-        //Set after a TCPPacket is receive according to the 
+        //Set after a TCPPacket is received according to the checksum
         bool goodChecksum;
+        uint32_t packetNumber;
 
     private:
 
