@@ -109,10 +109,6 @@ int ConnectRequestPacket::receive(int sockfd)
 }
 
 
-
-
-
-
 int AcceptRequestPacket::send(int sockfd, struct sockaddr_un conninfo)
 {
     cout << "Sending AcceptRequest" << endl;
@@ -314,18 +310,6 @@ int SendResponsePacket::receive(int sockfd)
     return 0;
 }
 
-int CloseResponsePacket::send(int sockfd, sockaddr_un conninfo)
-{
-
-	return 0;
-}
-
-int CloseResponsePacket::receive(int sockfd)
-{
-
-	return 0;
-}
-
 int CloseRequestPacket::send(int sockfd, struct sockaddr_un conninfo)
 {
     cout << "Sending CloseRequest" << endl;
@@ -334,7 +318,7 @@ int CloseRequestPacket::send(int sockfd, struct sockaddr_un conninfo)
         return -1;
     }   
 
-    if(sendto(sockfd, &sockid, sizeof(sockfd), 0,(struct sockaddr *)&conninfo, sizeof(conninfo) ) < 0) {
+    if(sendto(sockfd, &sockid, sizeof(sockid), 0,(struct sockaddr *)&conninfo, sizeof(conninfo) ) < 0) {
         return -1;
     }   
  
@@ -343,10 +327,35 @@ int CloseRequestPacket::send(int sockfd, struct sockaddr_un conninfo)
 
 int CloseRequestPacket::receive(int sockfd)
 {
-    if(recv(sockfd, &sockid, sizeof(sockfd), 0) < 0 )
+    if(recv(sockfd, &sockid, sizeof(sockid), 0) < 0 )
     {
         return -1;
     }   
+
+    return 0;
+}
+
+int CloseResponsePacket::send(int sockfd, sockaddr_un conninfo)
+{
+ cout << "Sending CloseResponse" << endl;
+
+    if(sendto(sockfd, &mOpcode, sizeof(mOpcode), 0,(struct sockaddr *)&conninfo, sizeof(conninfo) ) < 0) {
+        return -1;
+    }   
+
+    if(sendto(sockfd, &status, sizeof(status), 0,(struct sockaddr *)&conninfo, sizeof(conninfo) ) < 0) {
+        return -1;
+    }   
+ 
+    return 0;
+}
+
+int CloseResponsePacket::receive(int sockfd)
+{
+    if(recv(sockfd, &status, sizeof(status), 0) < 0)
+    {
+        return -1;
+    }
 
     return 0;
 }

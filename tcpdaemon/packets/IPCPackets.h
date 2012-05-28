@@ -146,7 +146,7 @@ public:
     int send(int sockfd, struct sockaddr_un conninfo);
     int receive(int sockfd);
     CloseResponsePacket();
-    int sockid;
+    int status;
 
 };
 
