@@ -31,7 +31,7 @@ void TimerService::removeTimer(uint32_t seqNum, TCPConn& theConn)
     cout << "Looking for " << seqNum << " owned by " << &theConn << endl;
     while(iter != mTimers.end())
     {
-        cout << "Found " << iter->seqnum << " owned by " << iter->conn << endl;
+        //cout << "Found " << iter->seqnum << " owned by " << iter->conn << endl;
         if (iter->seqnum <= seqNum && iter->conn == &theConn )
         {
             cout << "Timer removed "<< iter->seqnum << endl;
@@ -81,13 +81,13 @@ void TimerService::TimeOut(DeltaTimer timer)
     DeltaTimer expiredTimer = mTimers.front();
 
     list<DeltaTimer>::iterator iter;
-    cout << "Looking for " << timer.seqnum << " owned by " << timer.conn << endl;
+    //cout << "Looking for " << timer.seqnum << " owned by " << timer.conn << endl;
     for(iter = mTimers.begin(); iter != mTimers.end(); iter++)
     {
-        cout << "Found " << iter->seqnum << " owned by " << iter->conn << endl;
+        //cout << "Found " << iter->seqnum << " owned by " << iter->conn << endl;
         if (iter->seqnum == timer.seqnum && iter->conn == timer.conn )
         {
-            cout << "Timer "<< iter->seqnum <<" removed due to expiration" << endl;
+            //cout << "Timer "<< iter->seqnum <<" removed due to expiration" << endl;
             mTimers.erase(iter);
             expiredTimer.conn->ExpireTimer();
             return;

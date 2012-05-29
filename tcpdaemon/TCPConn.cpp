@@ -360,11 +360,11 @@ void TCPConn::ExpireTimer()
 
 
     TCPPacket* outgoingPacket = mSendBuffer.front();
-    int RTO = mSRTT * 2;
-    cout << anID << " RTO: " << RTO / 1000.0 << endl;
+    mRTO = mSRTT+(4*mSDEV);
+    cout << anID << " RTO: " << mRTO / 1000.0 << endl;
 
     //We always reset the timer for our SRTT
-    theDaemon.addTimer(RTO/1000.0, outgoingPacket->packet.seqNum, *this);
+    theDaemon.addTimer(mRTO/1000.0, outgoingPacket->packet.seqNum, *this);
 
     stack<TCPPacket*> tmpStack;
 
