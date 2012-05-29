@@ -112,8 +112,10 @@ class TCPConn
     std::string anID;
     int mPacketsInFlight;
 
-    int mRTO;
     int mSRTT;
+    int mSDEV;
+    int mSERR;
+    int mRTO;
     uint32_t mCurrentPacketNum;
     uint32_t mLastPacketNum;
 

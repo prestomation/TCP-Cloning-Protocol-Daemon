@@ -3,6 +3,7 @@
 #include <stack>
 #include <sys/un.h> //sockaddr_un, 
 #include <arpa/inet.h> //inet_ntop
+#include <cmath>
 
 #include "TCPConn.h"
 #include "packets/IPCPackets.h"
@@ -11,13 +12,14 @@
 
 #define WIN_SIZE 20
 #define RTO_U 4
-#define SMOOTHING_FACTOR 0.9
+#define g 0.125
+#define h 0.25 
 
 using namespace std;
 
 //BindRequest constructor
 TCPConn::TCPConn(TCPDaemon& daemon, BindRequestPacket* bindrequest, struct sockaddr_un IPCInfo, int ipcSock):
-    theDaemon(daemon), mIPCInfo(IPCInfo), mIPCSock(ipcSock), mRecvBuffer(), mSendBuffer(), mSRTT(1000)
+    theDaemon(daemon), mIPCInfo(IPCInfo), mIPCSock(ipcSock), mRecvBuffer(), mSendBuffer(), mSRTT(0), mSDEV(3000000), mRTO(6000000)
 {
     anID = "SERVER";
     mAckNum = 0;
@@ -55,7 +57,7 @@ TCPConn::TCPConn(TCPDaemon& daemon, BindRequestPacket* bindrequest, struct socka
 
 //ConnectRequest constructor
 TCPConn::TCPConn(TCPDaemon& daemon, ConnectRequestPacket* bindrequest, struct sockaddr_un IPCInfo, int ipcSock):
-    theDaemon(daemon), mIPCInfo(IPCInfo), mIPCSock(ipcSock), mSRTT(1000)
+    theDaemon(daemon), mIPCInfo(IPCInfo), mIPCSock(ipcSock), mSRTT(0), mSDEV(3000000), mRTO(6000000)
 {
 
     anID = "CLIENT";
@@ -252,10 +254,17 @@ void TCPConn::ReceiveData()
             
             timeval now;
             gettimeofday(&now, 0);
-            uint32_t timeDiff = (now.tv_usec - mLastTickTimeUSec);
-            cout << anID << ": We received at at " << now.tv_usec/1000<< " for a RTT of: " << timeDiff << endl;
-            mSRTT = SMOOTHING_FACTOR * mSRTT  + (1.0-SMOOTHING_FACTOR) * timeDiff;
+            uint32_t RTT = (now.tv_usec - mLastTickTimeUSec);
+            cout << anID << ": We received at at " << now.tv_usec/1000<< " for a RTT of: " << RTT << endl;
+            mSERR = RTT - mSRTT;
+	    cout << "SERR calculated as: " << mSERR << endl;
+
+            mSRTT = ((1-g)*mSRTT)+(g*RTT);
             cout << anID << ": SRTT calculated as " << mSRTT << endl;
+
+            mSDEV = ((1-h)*mSDEV)+(h*abs((float)mSERR));
+
+            mRTO = mSRTT+(4*mSDEV);
 
             while(!mSendBuffer.empty())
             {
@@ -388,6 +397,7 @@ void TCPConn::ExpireTimer()
         mSendBuffer.push_front(tmpStack.top());
         tmpStack.pop();
     }
+
     timeval now;
     gettimeofday(&now, 0);
     mLastTickTimeUSec =  now.tv_usec;
