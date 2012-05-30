@@ -32,6 +32,11 @@ TCPPacket::TCPPacket(sockaddr_in destination, uint32_t seqnum, uint32_t acknum)
 TCPPacket::TCPPacket(int sock): goodChecksum(true)
 {
     mState = STATE_INCOMING;
+    if(!initCRC)
+    {
+        initCRCTable();
+        initCRC= true;
+    }
 
     ::recvfrom(sock, &packet, sizeof(packet), 0, 0, 0);
 
@@ -40,14 +45,14 @@ TCPPacket::TCPPacket(int sock): goodChecksum(true)
     packet.checksum = 0; // erase it
     sockaddr_in tempHeader = packet.header;
     memset( &packet.header, 0, sizeof (packet.header ));  
-    packet.checksum =  crc((uint8_t *)&packet, sizeof(packet)); 
+    uint32_t checksum =  crc((uint8_t *)&packet, sizeof(packet)); 
     packet.header = tempHeader;
 
     //std::cout << "Checksum: " << originalCRC << " Computed: " << packet.checksum << std::endl;
     // check to see if original and new crc match
-    if (originalCRC != packet.checksum)
+    if (originalCRC != checksum)
     {
-        std::cout << "!!!Checksum "<< packet.checksum << " is bad, expected: " << originalCRC << std::endl;;
+        std::cout << "!!!Checksum "<< checksum << " is bad, expected: " << originalCRC << std::endl;;
         goodChecksum = false;
 
     }
