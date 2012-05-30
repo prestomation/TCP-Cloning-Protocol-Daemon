@@ -56,7 +56,6 @@ void TCPDaemon::Start(sockaddr_in trollInfo)
 			
 		}
 
-		cout << "Listening for quantity:: " << mNumListeningSockets << endl;
 		rv = poll(listeningSockets, mNumListeningSockets, mCurrentTimer.time);
 
 		if (rv == -1)
@@ -135,8 +134,7 @@ void TCPDaemon::Start(sockaddr_in trollInfo)
 				else if (incomingpacket->getOpcode() == OPCODE_CLOSE_REQUEST)
 				{
 					CloseRequestPacket* request = dynamic_cast<CloseRequestPacket*>(incomingpacket);
-                    //TODO: call into TCPConn to signal the close of the connection
-					//mIPCConnMap[incomingIPCInfo.sun_path]->CloseRequest(request);
+					mIPCConnMap[incomingIPCInfo.sun_path]->CloseRequest(request);
 
 				}
 				else{

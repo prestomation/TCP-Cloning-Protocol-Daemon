@@ -177,6 +177,17 @@ void TCPConn::ReceiveData()
                 return;
             }   
 
+            if(incomingPacket.packet.flags == TCPPacket::FLAG_FINACK && mState == LASTACK)
+            {
+                //This is a duplication of the SYN packet, drop it
+                cout << anID << ": FINACK We're done here" << endl;
+
+                CloseResponsePacket response;
+                response.status = close(mUDPSocket);            
+                response.send(mIPCSock, mIPCInfo);
+                theDaemon.removeListeningSocket(mUDPSocket, this);
+                return;
+            }   
 
             cout<< anID <<" Received SEQ: " << incomingPacket.packet.seqNum << " we might want: " << mAckNum+incomingPacket.packet.payloadsize << endl;
             if(incomingPacket.packet.seqNum < (mAckNum+incomingPacket.packet.payloadsize))
@@ -184,8 +195,7 @@ void TCPConn::ReceiveData()
                 //This is a duplicate, just drop it about it, but send an ACK
                 cout << anID << ": we've had this packet before, resending ACK" <<endl;
                 sendACK();
-                if(mRecvBuffer.size() > 0)
-                    return;
+                return;
             }
 
 
@@ -209,6 +219,19 @@ void TCPConn::ReceiveData()
                     response.send(mIPCSock, mIPCInfo);
                     mState = STANDBY;
                 }
+                else if(mState != RECV && incomingPacket.packet.flags == TCPPacket::FLAG_FIN)
+                {
+                    cout << anID << ": received FIN packet. ACK it. CLOSING.." << endl;
+                    sendACK(TCPPacket::FLAG_FINACK);
+                    cout << anID << ": Received FIN, FINACK sending:" << endl;
+                    TCPPacket outgoingPacket(mRemoteInfo, mSeqNum+1, mAckNum+1, 0, 0, TCPPacket::FLAG_FIN);
+                    //Server sends FIN
+                    cout << anID << ": FINACK sent, FIN Sending" << endl;
+                    outgoingPacket.send(mUDPSocket);
+                    mState = LASTACK;
+
+
+                }
                 else
                 {
                     //Client isn't waiting for data, so store it
@@ -220,13 +243,7 @@ void TCPConn::ReceiveData()
         }
     }
     else{
-        //Else this is an ACK
-        if(anID == "SERVER")
-        {
-            cout << "THIS SHOULDNT HAPPEN. The server received an unknown packet" << endl;
-            sendACK();
-            return;
-        }
+        //Else this is the CLIENT
 
         cout << anID <<" Received ACK: " << incomingPacket.packet.ackNum << " our seqnum is: " << mSeqNum << endl;
 
@@ -237,10 +254,39 @@ void TCPConn::ReceiveData()
             mState = STANDBY;
         }
 
+        if (incomingPacket.packet.flags == TCPPacket::FLAG_FINACK && mState == FINWAIT)
+        {
+            //Client receives Server FINACK
+            cout << anID << ": FIN Handshake complete!" << endl;
+
+            //The send buffer still has the FIN, clear it
+            mSendBuffer.clear();
+            mState= FINWAIT2;
+            return ;
+        }
+
+
+        if (incomingPacket.packet.flags == TCPPacket::FLAG_FIN && mState == FINWAIT2)
+        {
+            //Client receives Server FIN
+
+            cout << anID << ": Receives FIN from Server" << endl;
+            timeval now;
+            gettimeofday(&now, 0);
+            mTime_wait_start = now.tv_sec;
+
+            mState= TIMEWAIT;
+            cout << anID << ": Sending final FINACK to Server" << endl;
+            theDaemon.addTimer(10*1000, mSeqNum+1, *this);
+            sendACK(TCPPacket::FLAG_FINACK);
+            return;
+
+        }
+
         if(incomingPacket.packet.ackNum > mSeqNum)
         {
 
-            cout << anID << " dropping packet" << endl;
+            cout << anID << " dropping packet. This packet is from the future!" << endl;
             return;
         }
         else
@@ -251,13 +297,13 @@ void TCPConn::ReceiveData()
 
             //SRTT calculation. 
             //SRTT is only updated if it's the first time an ack is encountered
-            
+
             timeval now;
             gettimeofday(&now, 0);
             uint32_t RTT = (now.tv_usec - mLastTickTimeUSec);
             cout << anID << ": We received at at " << now.tv_usec/1000<< " for a RTT of: " << RTT << endl;
             mSERR = RTT - mSRTT;
-	    cout << "SERR calculated as: " << mSERR << endl;
+            cout << "SERR calculated as: " << mSERR << endl;
 
             mSRTT = ((1-g)*mSRTT)+(g*RTT);
             cout << anID << ": SRTT calculated as " << mSRTT << endl;
@@ -352,11 +398,57 @@ void TCPConn::SendRequest(SendRequestPacket* packet)
     delete packet;
 }
 
+void TCPConn::CloseRequest(CloseRequestPacket* packet)
+{
+
+    cout << anID << " Going into CLOSE: " << endl;
+
+    if(anID == "CLIENT" )
+    {
+        mState = FINWAIT;
+
+        mSeqNum++;
+        TCPPacket *outgoingPacket = new TCPPacket(mRemoteInfo, mSeqNum, mAckNum, 0, 1, TCPPacket::FLAG_FIN);
+        outgoingPacket->packetNumber = ++mLastPacketNum;
+        mSendBuffer.push_back(outgoingPacket);
+
+        theDaemon.addTimer(1.0, mSeqNum, *this);
+    }
+    else
+    {
+        //This is the server
+        mState = CLOSE_WAIT;
+    }
+
+    delete packet;
+
+}
 
 //This is where we actually put data packets on the wire
 void TCPConn::ExpireTimer()
 {
 
+    if(mState == TIMEWAIT)
+    {
+        cout << "state is TIMEWAIT FIN" << endl;
+        timeval now;
+        gettimeofday(&now, 0);
+        if(now.tv_sec -mTime_wait_start > 10)
+        {
+            //If it has been 10 seconds, close connection
+            cout << anID << ": We're done here" << endl;
+
+            CloseResponsePacket response;
+            response.status = close(mUDPSocket);            
+            response.send(mIPCSock, mIPCInfo);
+            theDaemon.removeListeningSocket(mUDPSocket, this);
+        }
+    }
+    if(mSendBuffer.empty())
+    {
+        //Nothing to do here
+        return;
+    }
 
 
     TCPPacket* outgoingPacket = mSendBuffer.front();
@@ -371,6 +463,15 @@ void TCPConn::ExpireTimer()
     cout << anID << ": timer expired, send our window" << endl;
     while(!mSendBuffer.empty() && mSendBuffer.front()->packetNumber < mCurrentPacketNum + 20)
     {
+
+
+        cout << anID << ": tmpStack size: " << tmpStack.size() << endl;
+        if(tmpStack.size() > 0 && mSendBuffer.front()->packet.flags == TCPPacket::FLAG_FIN)
+        {
+            //If we still have data in the window, don't send the FIN packet yet
+            cout << anID << " data still unacked but FIN in queue" << endl;
+            break;
+        } 
 
         //Room is available in the window, send some packets
         //Pop our next packet and put it on our temp stack
@@ -388,7 +489,7 @@ void TCPConn::ExpireTimer()
             }
         }
 
-        cout << anID << ": sending a packet" << endl;
+        cout << anID << ": sending a packet SEQ:" <<  tmpStack.top()->packet.seqNum << endl;
         tmpStack.top()->send(mUDPSocket);
     }
     //Ok, now our whole window is in flight, put these packets back in our buffer so they can be ACK'd or resent
@@ -411,10 +512,13 @@ void TCPConn::ExpireTimer()
 void TCPConn::sendACK(TCPPacket::Flags flags )
 {
 
-    TCPPacket outgoingPacket(mRemoteInfo, mSeqNum , mAckNum, 0, 0, flags);
+    TCPPacket *outgoingPacket = new TCPPacket(mRemoteInfo, mSeqNum , mAckNum, 0, 0, flags);
     cout << anID << " Sending ACK " << mAckNum << " for SEQ " << mSeqNum << endl;
-    outgoingPacket.send(mUDPSocket);
+    outgoingPacket->send(mUDPSocket);
+    delete outgoingPacket;
     //TODO: put this on a timer
+    //theDaemon.addTimer(mRTO/1000.0, outgoingPacket->packet.seqNum, *this);
+    //mSendBuffer.push_back(outgoingPacket);
     return;
 }
 

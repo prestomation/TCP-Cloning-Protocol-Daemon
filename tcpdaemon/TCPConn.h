@@ -49,6 +49,8 @@ class TCPConn
     //Called when the Daemon has received a SendRequest
     void SendRequest(SendRequestPacket* packet);
 
+
+    void CloseRequest(CloseRequestPacket* packet);
     //This is called by TCPDaemon when data arrives
     void ReceiveData();
 
@@ -68,6 +70,12 @@ class TCPConn
         
         RECV,
         SEND,
+        CLOSING,
+        CLOSE_WAIT,
+        FINWAIT,
+        FINWAIT2,
+        LASTACK,
+        TIMEWAIT
     };
 
     //Class static var for creating stream sockets on the server end
@@ -120,6 +128,7 @@ class TCPConn
     uint32_t mLastPacketNum;
 
     uint32_t mLastTickTimeUSec;
+    uint32_t mTime_wait_start;
 };
 
 

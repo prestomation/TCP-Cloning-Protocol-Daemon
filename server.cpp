@@ -129,8 +129,8 @@ int main(int argc, char *argv[])
 
 
     }
+    outputFile.close();
 
     /* close all connections and remove socket file */
-    close(sock);
-    outputFile.close();
+    CLOSE(sock);
 }

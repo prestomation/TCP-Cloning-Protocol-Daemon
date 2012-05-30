@@ -299,7 +299,7 @@ int RECV(int sockfd, void *buf, size_t len, int flags){
 
 int CLOSE(int sockfd){
 
-    cout << "CLOSE" << endl;
+    cout << "CLOSE socket: " <<sockfd<< endl;
     CloseRequestPacket request;
 
     request.sockid = sockfd;

@@ -13,7 +13,7 @@ TCPPacket::TCPPacket(sockaddr_in destination, uint32_t seqnum, uint32_t acknum, 
     packet.payloadsize = payloadsize;
     if(payload != NULL && payloadsize > 0)
     {
-        //Only copy the payload if we have a valid pointer or a 
+        //Only copy the payload if we have a valid pointer and a 
         //positive number of bytes 
         memcpy(packet.payload, payload, payloadsize); 
     } 
