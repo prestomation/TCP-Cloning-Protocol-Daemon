@@ -15,13 +15,36 @@ void TimerService::addTimer(uint32_t time, uint32_t seqNum, TCPConn& theConn)
     DeltaTimer newTimer(time, seqNum, &theConn);
     if( mTimers.empty())
     {
+        //If we have no timers, set daemon timeout and return
         theDaemon.setNextTimeout(newTimer);
         cout << "Resetting timeout first timer" << endl;
+        mTimers.push_back(newTimer);
+        return;
     }
+
+    uint32_t timeDiff = time;
+    cout << "Adding time: " << timeDiff << endl;
+    list<DeltaTimer>::iterator iter = mTimers.begin();
+
+    while(iter != mTimers.end())
+    {
+            if(timeDiff < iter->time)
+            {
+                //cout << "timeDiff: " << timeDiff <<" less than itertime: " << iter->time << endl;
+                newTimer.time = timeDiff;
+                mTimers.insert(iter, newTimer);
+                //cout << "Timer " << seqNum << " added with time:"<< timeDiff << endl;
+                iter->time -= timeDiff;
+                return;
+            }
+            timeDiff -= iter->time;
+            //cout << "New time diff: " << timeDiff << endl;
+            iter++;
+    }
+
     mTimers.push_back(newTimer);
-    cout << "Timer added " << seqNum <<endl;
 
-
+    cout << "Timer added to end" << seqNum <<endl;
 
 }
 
@@ -47,8 +70,7 @@ void TimerService::removeTimer(uint32_t seqNum, TCPConn& theConn)
 void TimerService::removeAll(TCPConn& theConn)
 {
     list<DeltaTimer>::iterator iter = mTimers.begin();
-    mTimers.clear(); //TODO: we really want to do the loop down there
-/*
+    //mTimers.clear(); //TODO: we really want to do the loop down there
     while(iter != mTimers.end())
     {
         cout << "Found " << iter->seqnum << " owned by " << iter->conn << endl;
@@ -61,7 +83,7 @@ void TimerService::removeAll(TCPConn& theConn)
         {
             iter++;
         }
-    }*/
+    }
 }
 
  

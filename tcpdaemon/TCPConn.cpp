@@ -186,6 +186,7 @@ void TCPConn::ReceiveData()
                 response.status = close(mUDPSocket);            
                 response.send(mIPCSock, mIPCInfo);
                 theDaemon.removeListeningSocket(mUDPSocket, this);
+                theDaemon.removeAllTimers(*this);
                 return;
             }   
 
@@ -229,6 +230,8 @@ void TCPConn::ReceiveData()
                     cout << anID << ": FINACK sent, FIN Sending" << endl;
                     outgoingPacket.send(mUDPSocket);
                     mState = LASTACK;
+                    
+                    theDaemon.addTimer(1000, mSeqNum+1, *this);
 
 
                 }
@@ -257,7 +260,7 @@ void TCPConn::ReceiveData()
         if (incomingPacket.packet.flags == TCPPacket::FLAG_FINACK && mState == FINWAIT)
         {
             //Client receives Server FINACK
-            cout << anID << ": FIN Handshake complete!" << endl;
+            cout << anID << ": FIN first handshake complete!" << endl;
 
             //The send buffer still has the FIN, clear it
             mSendBuffer.clear();
@@ -277,7 +280,7 @@ void TCPConn::ReceiveData()
 
             mState= TIMEWAIT;
             cout << anID << ": Sending final FINACK to Server" << endl;
-            theDaemon.addTimer(10*1000, mSeqNum+1, *this);
+            theDaemon.addTimer(4*1000, mSeqNum+1, *this);
             sendACK(TCPPacket::FLAG_FINACK);
             return;
 
@@ -428,21 +431,41 @@ void TCPConn::CloseRequest(CloseRequestPacket* packet)
 void TCPConn::ExpireTimer()
 {
 
+    if(anID == "SERVER")
+    {
+        //This better be the last timeout
+        cout << "This should be the end TIMEOUT" << endl;
+        sendACK(TCPPacket::FLAG_FINACK);
+        cout << anID << ": Received FIN, FINACK sending:" << endl;
+        TCPPacket outgoingPacket(mRemoteInfo, mSeqNum+1, mAckNum+1, 0, 0, TCPPacket::FLAG_FIN);
+        //Server sends FIN
+        cout << anID << ": FINACK sent, FIN Sending" << endl;
+        outgoingPacket.send(mUDPSocket);
+        mState = LASTACK;
+    }
+
     if(mState == TIMEWAIT)
     {
         cout << "state is TIMEWAIT FIN" << endl;
         timeval now;
         gettimeofday(&now, 0);
-        if(now.tv_sec -mTime_wait_start > 10)
+        if(now.tv_sec -mTime_wait_start >= 4)
         {
             //If it has been 10 seconds, close connection
             cout << anID << ": We're done here" << endl;
 
-            CloseResponsePacket response;
-            response.status = close(mUDPSocket);            
-            response.send(mIPCSock, mIPCInfo);
-            theDaemon.removeListeningSocket(mUDPSocket, this);
         }
+        else
+        {
+            cout << "We waiting " << now.tv_sec -mTime_wait_start << " seconds" << endl;
+            cout << "Did we wait long enough?" << endl;
+        }
+        CloseResponsePacket response;
+        response.status = close(mUDPSocket);            
+        response.send(mIPCSock, mIPCInfo);
+        theDaemon.removeListeningSocket(mUDPSocket, this);
+        theDaemon.removeAllTimers(*this);
+        return;
     }
     if(mSendBuffer.empty())
     {
